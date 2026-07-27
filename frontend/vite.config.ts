@@ -82,6 +82,24 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    css: true
+    css: true,
+    coverage: {
+      provider: 'v8',
+      // Focus the gate on logic units. Page/view components are exercised by
+      // integration/e2e rather than unit tests.
+      include: [
+        'src/services/**/*.ts',
+        'src/stores/**/*.ts',
+        'src/components/LoadingSpinner.tsx',
+        'src/components/ErrorBoundary.tsx',
+        'src/modules/common/pages/NotFoundPage.tsx'
+      ],
+      thresholds: {
+        statements: 80,
+        functions: 80,
+        lines: 80,
+        branches: 75
+      }
+    }
   }
 })
