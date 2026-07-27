@@ -124,6 +124,62 @@ class ApiService {
     const response = await this.client.get('/athletes/stats', { params: { orgId } })
     return response.data
   }
+
+  // Training Load endpoints
+  async getTrainingSessions(
+    orgId: string,
+    params?: { dateFrom?: string; dateTo?: string; teamId?: string },
+  ) {
+    const response = await this.client.get('/training/sessions', {
+      params: { orgId, ...params },
+    })
+    return response.data
+  }
+
+  async createTrainingSession(orgId: string, data: any) {
+    const response = await this.client.post('/training/sessions', data, { params: { orgId } })
+    return response.data
+  }
+
+  async addAthleteLoad(sessionId: string, orgId: string, data: any) {
+    const response = await this.client.post(`/training/sessions/${sessionId}/athlete-load`, data, {
+      params: { orgId },
+    })
+    return response.data
+  }
+
+  async getAthleteLoadHistory(athleteId: string, orgId: string, days = 30) {
+    const response = await this.client.get(`/training/athlete-load/${athleteId}`, {
+      params: { orgId, days },
+    })
+    return response.data
+  }
+
+  // Alerts endpoints
+  async getAlerts(orgId: string, params?: { status?: string; severity?: string; athleteId?: string }) {
+    const response = await this.client.get('/alerts', { params: { orgId, ...params } })
+    return response.data
+  }
+
+  async getAlertStats(orgId: string) {
+    const response = await this.client.get('/alerts/stats', { params: { orgId } })
+    return response.data
+  }
+
+  async generateAlerts(orgId: string) {
+    const response = await this.client.post('/alerts/generate', {}, { params: { orgId } })
+    return response.data
+  }
+
+  async acknowledgeAlert(id: string, orgId: string) {
+    const response = await this.client.patch(`/alerts/${id}/acknowledge`, {}, { params: { orgId } })
+    return response.data
+  }
+
+  async resolveAlert(id: string, orgId: string, note?: string) {
+    const response = await this.client.patch(`/alerts/${id}/resolve`, { note }, { params: { orgId } })
+    return response.data
+  }
 }
 
 export const apiService = new ApiService()

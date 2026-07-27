@@ -14,6 +14,8 @@ const AthletesPage = lazy(() => import('./modules/athletes/pages/AthletesPage'))
 const AthleteDetailPage = lazy(() => import('./modules/athletes/pages/AthleteDetailPage'))
 const AthleteFormPage = lazy(() => import('./modules/athletes/pages/AthleteFormPage'))
 const WellnessPage = lazy(() => import('./modules/wellness/pages/WellnessPage'))
+const TrainingLoadPage = lazy(() => import('./modules/training-load/pages/TrainingLoadPage'))
+const AlertsPage = lazy(() => import('./modules/alerts/pages/AlertsPage'))
 const NotFoundPage = lazy(() => import('./modules/common/pages/NotFoundPage'))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -45,9 +47,9 @@ function App() {
             <Route path="athletes/:id/edit" element={<AthleteFormPage />} />
             
             {/* Sprint 3 routes */}
-            <Route path="training" element={<PlaceholderPage title="Training Load" />} />
+            <Route path="training" element={<TrainingLoadPage />} />
             <Route path="wellness" element={<WellnessPage />} />
-            <Route path="alerts" element={<PlaceholderPage title="Alerts" />} />
+            <Route path="alerts" element={<AlertsPage />} />
             <Route path="settings" element={<PlaceholderPage title="Settings" />} />
           </Route>
 

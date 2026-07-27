@@ -156,6 +156,7 @@ model Organization {
   athleteSessionLoads AthleteSessionLoad[]
   algorithmConfiguration AlgorithmConfiguration?
   loadCalculations AthleteLoadCalculation[]
+  alerts       Alert[]
 
   @@index([slug])
   @@index([deletedAt])
@@ -305,6 +306,7 @@ model Athlete {
   wellnessSurveys WellnessSurvey[]
   sessionLoads AthleteSessionLoad[]
   loadCalculations AthleteLoadCalculation[]
+  alerts       Alert[]
 
   @@index([orgId, status])
   @@index([orgId, sportId])
@@ -719,4 +721,68 @@ model AthleteLoadCalculation {
   @@index([athleteId, calcDate])
   @@index([orgId, riskLevel])
   @@map("athlete_load_calculations")
+}
+
+// ==========================================================================
+// ALERTS
+// ==========================================================================
+
+enum AlertType {
+  ACWR_HIGH        // ACWR in the HIGH danger zone (1.3 - 1.5)
+  ACWR_VERY_HIGH   // ACWR in the VERY_HIGH extreme-risk zone (>= 1.5)
+  ACWR_SPIKE       // Large day-over-day jump in ACWR
+  WELLNESS_LOW     // Wellness score below threshold
+  CUSTOM
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Alert {
+  id          String @id @default(uuid())
+  orgId       String @map("organization_id")
+  athleteId   String @map("athlete_id")
+
+  type        AlertType
+  severity    AlertSeverity @default(WARNING)
+  status      AlertStatus   @default(OPEN)
+
+  title       String  @db.VarChar(200)
+  message     String  @db.Text
+
+  // Contextual snapshot at time of firing
+  metricValue Float?  @map("metric_value")  // e.g. the ACWR value
+  threshold   Float?                         // threshold that was crossed
+  riskLevel   String? @map("risk_level") @db.VarChar(20)
+  triggeredOn DateTime @map("triggered_on") @db.Date
+
+  // Workflow
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  acknowledgedBy String?   @map("acknowledged_by")
+  resolvedAt     DateTime? @map("resolved_at")
+  resolvedBy     String?   @map("resolved_by")
+  resolutionNote String?   @map("resolution_note") @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  athlete      Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  // One open alert of a given type per athlete per day (idempotent generation)
+  @@unique([athleteId, type, triggeredOn])
+  @@index([orgId, status])
+  @@index([orgId, severity])
+  @@index([athleteId, status])
+  @@map("alerts")
 }

@@ -12,6 +12,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module'
 import { WellnessModule } from './modules/wellness/wellness.module'
 import { TrainingLoadModule } from './modules/training-load/training-load.module'
 import { CalculationsModule } from './modules/calculations/calculations.module'
+import { AlertsModule } from './modules/alerts/alerts.module'
 
 // Guards
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -48,6 +49,7 @@ import { RolesGuard } from './common/guards/roles.guard'
     TrainingLoadModule,
     // Feature Modules - Sprint 4
     CalculationsModule,
+    AlertsModule,
   ],
   providers: [
     {
