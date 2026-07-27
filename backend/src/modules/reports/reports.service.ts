@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Optional } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { AuditService } from '../audit/audit.service'
 import { CalculationsService } from '../calculations/calculations.service'
 import { InjuriesService } from '../injuries/injuries.service'
 import { WellnessService } from '../wellness/wellness.service'
@@ -11,6 +12,7 @@ export class ReportsService {
     private calculations: CalculationsService,
     private injuries: InjuriesService,
     private wellness: WellnessService,
+    @Optional() private audit?: AuditService,
   ) {}
 
   /**
@@ -69,6 +71,13 @@ export class ReportsService {
         .map((v) => csvCell(v))
         .join(','),
     )
+
+    await this.audit?.log({
+      orgId,
+      action: 'EXPORT',
+      entityType: 'report',
+      description: `Exported ACWR CSV for ${summary.athletes.length} athletes`,
+    })
 
     return [header.map(csvCell).join(','), ...rows].join('\n')
   }

@@ -284,9 +284,26 @@ npm install
 
 ---
 
-## Next Steps
+## Module Status
 
-After setup, proceed to [Sprint 1: Authentication & Athlete Management](../docs/sprint-1.md).
+| Module | Backend | Frontend | Notes |
+|--------|:-------:|:--------:|-------|
+| auth / users | ✅ | ✅ (login) | JWT, RBAC, MFA scaffolding |
+| athletes | ✅ | ✅ | CRUD + stats |
+| wellness | ✅ | ✅ | surveys, team avg, athlete trend |
+| training-load | ✅ | ✅ | sessions, sRPE, load history |
+| calculations | ✅ | ✅ (dashboard) | ACWR engine, **100% covered** |
+| dashboard | ✅ | ✅ | aggregated metrics |
+| alerts | ✅ | ✅ | ACWR-threshold alerts, ack/resolve |
+| injuries | ✅ | ✅ | CRUD, return-to-play, days-lost |
+| reports | ✅ | ✅ | team summary + CSV export |
+| audit | ✅ | ✅ | compliance log viewer (admin) |
+| import | ✅ | ✅ | CSV wellness import + preview |
+| admin | ⬜ | ⬜ | not yet implemented |
+
+Testing: run `npm test` in `backend/` (unit) and `frontend/` (vitest);
+`npm run test:e2e` in `backend/` for the bootstrap e2e (needs a DB for
+data-backed specs).
 
 For architecture details, see:
 - [Technical Architecture](../FIIM_PRD.md#section-8)

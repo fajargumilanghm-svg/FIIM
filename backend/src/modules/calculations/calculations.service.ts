@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Optional } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { AuditService } from '../audit/audit.service'
 import { CalculationEngine, CalculationConfig } from './services/calculation.engine'
 
 @Injectable()
 export class CalculationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private audit?: AuditService,
+  ) {}
 
   async getAlgorithmConfig(orgId: string) {
     const config = await this.prisma.algorithmConfiguration.findUnique({
@@ -32,6 +36,14 @@ export class CalculationsService {
   }
 
   async updateAlgorithmConfig(orgId: string, data: Partial<CalculationConfig>) {
+    await this.audit?.log({
+      orgId,
+      action: 'CONFIG_CHANGED',
+      entityType: 'algorithm_configuration',
+      entityId: orgId,
+      description: 'Updated ACWR algorithm configuration',
+      newValues: data as any,
+    })
     return this.prisma.algorithmConfiguration.upsert({
       where: { orgId },
       create: {
