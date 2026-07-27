@@ -181,6 +181,32 @@ class ApiService {
     return response.data
   }
 
+  // Injuries endpoints
+  async getInjuries(orgId: string, params?: { status?: string; severity?: string; athleteId?: string }) {
+    const response = await this.client.get('/injuries', { params: { orgId, ...params } })
+    return response.data
+  }
+
+  async getInjuryStats(orgId: string) {
+    const response = await this.client.get('/injuries/stats', { params: { orgId } })
+    return response.data
+  }
+
+  async createInjury(orgId: string, data: any) {
+    const response = await this.client.post('/injuries', data, { params: { orgId } })
+    return response.data
+  }
+
+  async updateInjury(id: string, orgId: string, data: any) {
+    const response = await this.client.patch(`/injuries/${id}`, data, { params: { orgId } })
+    return response.data
+  }
+
+  async deleteInjury(id: string, orgId: string) {
+    const response = await this.client.delete(`/injuries/${id}`, { params: { orgId } })
+    return response.data
+  }
+
   // Algorithm configuration (Settings)
   async getAlgorithmConfig(orgId: string) {
     const response = await this.client.get('/calculations/config', { params: { orgId } })

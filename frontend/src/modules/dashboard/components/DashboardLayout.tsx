@@ -6,6 +6,7 @@ import {
   Activity,
   ClipboardList,
   Bell,
+  HeartPulse,
   Settings,
   LogOut,
   ChevronDown,
@@ -19,6 +20,7 @@ const navigation = [
   { name: 'Athletes', href: '/athletes', icon: Users },
   { name: 'Training Load', href: '/training', icon: Activity },
   { name: 'Wellness', href: '/wellness', icon: ClipboardList },
+  { name: 'Injuries', href: '/injuries', icon: HeartPulse },
   { name: 'Alerts', href: '/alerts', icon: Bell },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]

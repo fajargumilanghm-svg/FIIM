@@ -13,6 +13,7 @@ import { WellnessModule } from './modules/wellness/wellness.module'
 import { TrainingLoadModule } from './modules/training-load/training-load.module'
 import { CalculationsModule } from './modules/calculations/calculations.module'
 import { AlertsModule } from './modules/alerts/alerts.module'
+import { InjuriesModule } from './modules/injuries/injuries.module'
 
 // Guards
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -50,6 +51,7 @@ import { RolesGuard } from './common/guards/roles.guard'
     // Feature Modules - Sprint 4
     CalculationsModule,
     AlertsModule,
+    InjuriesModule,
   ],
   providers: [
     {

@@ -157,6 +157,7 @@ model Organization {
   algorithmConfiguration AlgorithmConfiguration?
   loadCalculations AthleteLoadCalculation[]
   alerts       Alert[]
+  injuries     Injury[]
 
   @@index([slug])
   @@index([deletedAt])
@@ -307,6 +308,7 @@ model Athlete {
   sessionLoads AthleteSessionLoad[]
   loadCalculations AthleteLoadCalculation[]
   alerts       Alert[]
+  injuries     Injury[]
 
   @@index([orgId, status])
   @@index([orgId, sportId])
@@ -785,4 +787,61 @@ model Alert {
   @@index([orgId, severity])
   @@index([athleteId, status])
   @@map("alerts")
+}
+
+// ==========================================================================
+// INJURIES
+// ==========================================================================
+
+enum InjurySeverity {
+  MINOR       // < 7 days lost
+  MODERATE    // 7 - 28 days lost
+  SEVERE      // > 28 days lost
+}
+
+enum InjuryStatus {
+  OPEN            // Newly reported, athlete out
+  RECOVERING      // Under rehabilitation
+  RETURN_TO_PLAY  // Cleared, reintegrating
+  RESOLVED        // Fully recovered / closed
+}
+
+enum InjuryMechanism {
+  CONTACT
+  NON_CONTACT
+  OVERUSE
+  UNKNOWN
+}
+
+model Injury {
+  id          String @id @default(uuid())
+  orgId       String @map("organization_id")
+  athleteId   String @map("athlete_id")
+
+  bodyPart    String  @map("body_part") @db.VarChar(100)
+  injuryType  String? @map("injury_type") @db.VarChar(100)  // e.g. hamstring strain
+  mechanism   InjuryMechanism @default(UNKNOWN)
+  severity    InjurySeverity  @default(MINOR)
+  status      InjuryStatus    @default(OPEN)
+  description String? @db.Text
+
+  onsetDate          DateTime  @map("onset_date") @db.Date
+  expectedReturnDate DateTime? @map("expected_return_date") @db.Date
+  actualReturnDate   DateTime? @map("actual_return_date") @db.Date
+  daysLost           Int       @default(0) @map("days_lost")
+
+  reportedBy String? @map("reported_by")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  athlete      Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+  @@index([athleteId, status])
+  @@index([orgId, onsetDate])
+  @@map("injuries")
 }
