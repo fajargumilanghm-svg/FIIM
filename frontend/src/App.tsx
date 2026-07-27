@@ -21,6 +21,7 @@ const InjuriesPage = lazy(() => import('./modules/injuries/pages/InjuriesPage'))
 const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'))
 const AuditPage = lazy(() => import('./modules/audit/pages/AuditPage'))
 const ImportPage = lazy(() => import('./modules/import/pages/ImportPage'))
+const AdminPage = lazy(() => import('./modules/admin/pages/AdminPage'))
 const NotFoundPage = lazy(() => import('./modules/common/pages/NotFoundPage'))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -59,6 +60,7 @@ function App() {
             <Route path="reports" element={<ReportsPage />} />
             <Route path="audit" element={<AuditPage />} />
             <Route path="import" element={<ImportPage />} />
+            <Route path="admin" element={<AdminPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

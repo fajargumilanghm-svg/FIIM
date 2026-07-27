@@ -17,6 +17,7 @@ import { InjuriesModule } from './modules/injuries/injuries.module'
 import { ReportsModule } from './modules/reports/reports.module'
 import { AuditModule } from './modules/audit/audit.module'
 import { ImportModule } from './modules/import/import.module'
+import { AdminModule } from './modules/admin/admin.module'
 
 // Guards
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -58,6 +59,7 @@ import { RolesGuard } from './common/guards/roles.guard'
     ReportsModule,
     AuditModule,
     ImportModule,
+    AdminModule,
   ],
   providers: [
     {

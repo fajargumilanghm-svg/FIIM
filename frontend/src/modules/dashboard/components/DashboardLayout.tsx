@@ -10,6 +10,7 @@ import {
   FileText,
   ScrollText,
   Upload,
+  ShieldCheck,
   Settings,
   LogOut,
   ChevronDown,
@@ -28,6 +29,7 @@ const navigation = [
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Audit', href: '/audit', icon: ScrollText },
   { name: 'Import', href: '/import', icon: Upload },
+  { name: 'Admin', href: '/admin', icon: ShieldCheck },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

@@ -181,6 +181,22 @@ class ApiService {
     return response.data
   }
 
+  // Admin endpoints
+  async getAdminOverview(orgId: string) {
+    const response = await this.client.get('/admin/overview', { params: { orgId } })
+    return response.data
+  }
+
+  async getOrganization(orgId: string) {
+    const response = await this.client.get('/admin/organization', { params: { orgId } })
+    return response.data
+  }
+
+  async updateOrganization(orgId: string, data: any) {
+    const response = await this.client.patch('/admin/organization', data, { params: { orgId } })
+    return response.data
+  }
+
   // Import endpoints
   async previewWellnessImport(csv: string) {
     const response = await this.client.post('/import/wellness/preview', { csv })
