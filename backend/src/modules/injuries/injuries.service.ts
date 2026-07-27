@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, Optional } from '@nestjs/common'
 import { InjurySeverity, InjuryStatus, Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
+import { AuditService } from '../audit/audit.service'
 import { CreateInjuryDto, InjuryQueryDto, UpdateInjuryDto } from './dto/injuries.dto'
 
 // Statuses that mean the athlete is currently unavailable.
@@ -12,7 +13,10 @@ const ACTIVE_INJURY_STATUSES: InjuryStatus[] = [
 
 @Injectable()
 export class InjuriesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private audit?: AuditService,
+  ) {}
 
   /**
    * Classify severity from days lost, per the OSICS-style bands used in the
@@ -77,6 +81,16 @@ export class InjuriesService {
     await this.prisma.athlete.update({
       where: { id: data.athleteId },
       data: { status: 'INJURED' },
+    })
+
+    await this.audit?.log({
+      orgId,
+      userId,
+      action: 'CREATE',
+      entityType: 'injury',
+      entityId: injury.id,
+      description: `Reported ${injury.severity} injury: ${injury.bodyPart}`,
+      containsMedicalData: true,
     })
 
     return injury

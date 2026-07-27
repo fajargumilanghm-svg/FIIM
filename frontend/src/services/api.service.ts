@@ -181,6 +181,20 @@ class ApiService {
     return response.data
   }
 
+  // Audit endpoints
+  async getAuditLogs(
+    orgId: string,
+    params?: { action?: string; entityType?: string; limit?: number; offset?: number },
+  ) {
+    const response = await this.client.get('/audit', { params: { orgId, ...params } })
+    return response.data
+  }
+
+  async getAuditStats(orgId: string) {
+    const response = await this.client.get('/audit/stats', { params: { orgId } })
+    return response.data
+  }
+
   // Reports endpoints
   async getTeamSummaryReport(orgId: string, params?: { dateFrom?: string; dateTo?: string }) {
     const response = await this.client.get('/reports/team-summary', { params: { orgId, ...params } })

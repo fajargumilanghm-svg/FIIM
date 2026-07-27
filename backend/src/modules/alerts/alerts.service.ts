@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, Optional } from '@nestjs/common'
 import { AlertSeverity, AlertStatus, AlertType, Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { CalculationsService } from '../calculations/calculations.service'
+import { AuditService } from '../audit/audit.service'
 import { AlertQueryDto } from './dto/alerts.dto'
 
 @Injectable()
@@ -9,6 +10,7 @@ export class AlertsService {
   constructor(
     private prisma: PrismaService,
     private calculations: CalculationsService,
+    @Optional() private audit?: AuditService,
   ) {}
 
   async findAll(orgId: string, query: AlertQueryDto = {}) {
@@ -111,8 +113,15 @@ export class AlertsService {
           updated++
         }
       } else {
-        await this.prisma.alert.create({ data })
+        const alert = await this.prisma.alert.create({ data })
         created++
+        await this.audit?.log({
+          orgId,
+          action: 'ALERT_TRIGGERED',
+          entityType: 'alert',
+          entityId: alert.id,
+          description: `${spec.title} for athlete ${calc.athleteId} (ACWR ${calc.acwr})`,
+        })
       }
     }
 
