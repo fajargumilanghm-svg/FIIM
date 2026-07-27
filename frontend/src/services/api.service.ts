@@ -181,6 +181,20 @@ class ApiService {
     return response.data
   }
 
+  // Reports endpoints
+  async getTeamSummaryReport(orgId: string, params?: { dateFrom?: string; dateTo?: string }) {
+    const response = await this.client.get('/reports/team-summary', { params: { orgId, ...params } })
+    return response.data
+  }
+
+  async downloadAthletesCsv(orgId: string): Promise<Blob> {
+    const response = await this.client.get('/reports/export/athletes.csv', {
+      params: { orgId },
+      responseType: 'blob',
+    })
+    return response.data
+  }
+
   // Injuries endpoints
   async getInjuries(orgId: string, params?: { status?: string; severity?: string; athleteId?: string }) {
     const response = await this.client.get('/injuries', { params: { orgId, ...params } })

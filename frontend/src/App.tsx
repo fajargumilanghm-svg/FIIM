@@ -18,6 +18,7 @@ const TrainingLoadPage = lazy(() => import('./modules/training-load/pages/Traini
 const AlertsPage = lazy(() => import('./modules/alerts/pages/AlertsPage'))
 const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'))
 const InjuriesPage = lazy(() => import('./modules/injuries/pages/InjuriesPage'))
+const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'))
 const NotFoundPage = lazy(() => import('./modules/common/pages/NotFoundPage'))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -53,6 +54,7 @@ function App() {
             <Route path="wellness" element={<WellnessPage />} />
             <Route path="injuries" element={<InjuriesPage />} />
             <Route path="alerts" element={<AlertsPage />} />
+            <Route path="reports" element={<ReportsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

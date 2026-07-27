@@ -14,6 +14,7 @@ import { TrainingLoadModule } from './modules/training-load/training-load.module
 import { CalculationsModule } from './modules/calculations/calculations.module'
 import { AlertsModule } from './modules/alerts/alerts.module'
 import { InjuriesModule } from './modules/injuries/injuries.module'
+import { ReportsModule } from './modules/reports/reports.module'
 
 // Guards
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -52,6 +53,7 @@ import { RolesGuard } from './common/guards/roles.guard'
     CalculationsModule,
     AlertsModule,
     InjuriesModule,
+    ReportsModule,
   ],
   providers: [
     {
