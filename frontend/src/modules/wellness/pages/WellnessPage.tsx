@@ -56,7 +56,7 @@ export default function WellnessPage() {
   const [teamAverage, setTeamAverage] = useState<any[]>([])
   const [athletes, setAthletes] = useState<any[]>([])
   const [selectedAthlete, setSelectedAthlete] = useState<string>('')
-  const [_athleteTrend, setAthleteTrend] = useState<any[]>([])
+  const [athleteTrend, setAthleteTrend] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedSurvey, setExpandedSurvey] = useState<string | null>(null)
 
@@ -253,6 +253,49 @@ export default function WellnessPage() {
               No wellness data available
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Athlete Wellness Trend */}
+      <div className="rounded-xl bg-white p-6 shadow-sm">
+        <h3 className="mb-4 text-lg font-semibold text-fiim-slate">
+          Athlete Wellness Trend (14d)
+        </h3>
+        {athleteTrend.length === 0 ? (
+          <div className="flex h-56 items-center justify-center text-muted-foreground">
+            No trend data for this athlete yet
+          </div>
+        ) : (
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={athleteTrend} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(value) =>
+                    new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  }
+                />
+                <YAxis tick={{ fontSize: 11 }} domain={[0, 10]} />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: '8px',
+                    border: 'none',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                  }}
+                />
+                <Line type="monotone" dataKey="wellnessScore" stroke="#0284c7" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="fatigueLevel" stroke="#d97706" strokeWidth={1.5} dot={false} strokeDasharray="5 5" />
+                <Line type="monotone" dataKey="muscleSoreness" stroke="#dc2626" strokeWidth={1.5} dot={false} strokeDasharray="5 5" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-fiim-sky"></span> Wellness</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-fiim-amber"></span> Fatigue</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500"></span> Soreness</span>
         </div>
       </div>
 
