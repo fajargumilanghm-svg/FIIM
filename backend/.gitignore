@@ -42,8 +42,8 @@ lerna-debug.log*
 .env.*.local
 
 # Prisma
-/prisma/migrations/*
-!/prisma/migrations/migration_lock.toml
+# NOTE: migrations ARE committed on purpose — they are the source of truth for
+# the database schema and must be reproducible across the team.
 
 # Temp files
 *.tmp
