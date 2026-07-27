@@ -299,7 +299,7 @@ npm install
 | reports | ✅ | ✅ | team summary + CSV export |
 | audit | ✅ | ✅ | compliance log viewer (admin) |
 | import | ✅ | ✅ | CSV wellness import + preview |
-| admin | ⬜ | ⬜ | not yet implemented |
+| admin | ✅ | ✅ | org overview + compliance settings |
 
 Testing: run `npm test` in `backend/` (unit) and `frontend/` (vitest);
 `npm run test:e2e` in `backend/` for the bootstrap e2e (needs a DB for
