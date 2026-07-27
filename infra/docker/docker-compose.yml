@@ -1,0 +1,151 @@
+services:
+
+  # ==========================================================================
+  # PostgreSQL 15 + TimescaleDB Extension
+  # ==========================================================================
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: fiim-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fiim_dev
+      POSTGRES_PASSWORD: fiim_dev_password
+      POSTGRES_DB: fiim_development
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fiim_dev -d fiim_development"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fiim-network
+
+  # ==========================================================================
+  # Redis (Session, Cache, Pub/Sub)
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: fiim-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fiim-network
+
+  # ==========================================================================
+  # RabbitMQ (Message Queue for Async Jobs)
+  # ==========================================================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: fiim-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: fiim
+      RABBITMQ_DEFAULT_PASS: fiim_password
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - fiim-network
+
+  # ==========================================================================
+  # Elasticsearch (Search & Audit Log)
+  # ==========================================================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: fiim-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - fiim-network
+
+  # ==========================================================================
+  # MinIO (S3-Compatible Object Storage for local dev)
+  # ==========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: fiim-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: fiim_minio
+      MINIO_ROOT_PASSWORD: fiim_minio_password
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console
+    volumes:
+      - minio_data:/data
+    networks:
+      - fiim-network
+
+  # ==========================================================================
+  # pgAdmin (Database Management UI)
+  # ==========================================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fiim-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: dev@fiim.local
+      PGADMIN_DEFAULT_PASSWORD: fiim_admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - fiim-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  minio_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  fiim-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

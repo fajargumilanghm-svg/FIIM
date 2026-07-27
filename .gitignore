@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# Node (subprojects also have their own .gitignore)
+node_modules/
+*.log
+
+# Build artifacts
+dist/
+dev-dist/
+build/
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Misc
+*.tmp
+*.temp
+.cache

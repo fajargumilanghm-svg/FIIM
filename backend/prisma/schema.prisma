@@ -1,0 +1,722 @@
+// This is your Prisma schema file for Sprint 1
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================================================
+// ENUMS
+// ==========================================================================
+
+enum Role {
+  SUPER_ADMIN
+  ORGANIZATION_ADMIN
+  COACH
+  ATHLETE
+  MEDICAL_STAFF
+  PERFORMANCE_DIRECTOR
+  PARENT_GUARDIAN
+  ANALYST
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  NON_BINARY
+  PREFER_NOT_TO_SAY
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum AthleteStatus {
+  ACTIVE
+  INJURED
+  RETURNING_TO_PLAY
+  RETIRED
+  TRANSFERRED
+  LOANED
+}
+
+enum SportType {
+  SOCCER
+  BASKETBALL
+  RUGBY
+  TENNIS
+  SWIMMING
+  TRACK_FIELD
+  VOLLEYBALL
+  HOCKEY
+  CRICKET
+  AMERICAN_FOOTBALL
+  GOLF
+  CYCLING
+  ROWING
+  GYMNASTICS
+  WRESTLING
+  BOXING
+  MMA
+  OTHER
+}
+
+enum PositionCategory {
+  GOALKEEPER
+  DEFENSE
+  MIDFIELD
+  FORWARD
+  BENCH
+  RESERVE
+  SPECIALIST
+  GENERAL
+}
+
+enum MFAStatus {
+  DISABLED
+  ENABLED
+  ENFORCED
+}
+
+enum MFAMethod {
+  TOTP
+  SMS
+  EMAIL
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  LOGIN
+  LOGOUT
+  EXPORT
+  IMPORT
+  ALERT_TRIGGERED
+  ALERT_RESOLVED
+  CALCULATION_RUN
+  CONFIG_CHANGED
+}
+
+// ==========================================================================
+// CORE TABLES
+// ==========================================================================
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  slug        String   @unique @db.VarChar(50)
+  description String?  @db.Text
+  logoUrl     String?  @db.VarChar(500)
+  website     String?  @db.VarChar(255)
+  country     String?  @db.VarChar(2)  // ISO 3166-1 alpha-2
+  timezone    String   @default("UTC") @db.VarChar(50)
+  currency    String   @default("USD") @db.VarChar(3)
+  
+  // Contact
+  contactEmail String? @db.VarChar(255)
+  contactPhone String? @db.VarChar(20)
+  address      String? @db.Text
+  
+  // Compliance
+  gdprEnabled     Boolean @default(true)
+  hipaaEnabled    Boolean @default(false)
+  dataRetentionYears Int  @default(7)
+  
+  // Features
+  features Json?  // Feature flags as JSON
+  
+  // Settings
+  settings Json?   // Organization-specific settings
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  // Relations
+  users        UserOrganization[]
+  athletes     Athlete[]
+  sports       Sport[]
+  teams        Team[]
+  auditLogs    AuditLog[]
+  refreshTokens RefreshToken[]
+  wellnessSurveys WellnessSurvey[]
+  trainingSessions TrainingSession[]
+  athleteSessionLoads AthleteSessionLoad[]
+  algorithmConfiguration AlgorithmConfiguration?
+  loadCalculations AthleteLoadCalculation[]
+
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("organizations")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique @db.VarChar(255)
+  password  String?  @db.VarChar(255) // Nullable for OAuth-only users
+  
+  // Profile
+  firstName    String   @db.VarChar(50)
+  lastName     String   @db.VarChar(50)
+  displayName  String?  @db.VarChar(100)
+  avatarUrl    String?  @db.VarChar(500)
+  phone        String?  @db.VarChar(20)
+  
+  // Status
+  status      UserStatus @default(PENDING_VERIFICATION)
+  emailVerified Boolean @default(false)
+  emailVerifiedAt DateTime?
+  
+  // MFA
+  mfaStatus   MFAStatus @default(DISABLED)
+  mfaMethod   MFAMethod?
+  mfaSecret   String?   @db.VarChar(255) // Encrypted TOTP secret
+  mfaBackupCodes String[] // Array of hashed backup codes
+  
+  // Security
+  failedLoginAttempts Int     @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  lastLoginIp         String? @db.VarChar(45)
+  passwordChangedAt   DateTime?
+  
+  // Preferences
+  preferredLanguage String   @default("en") @db.VarChar(5)
+  preferredTimezone String   @default("UTC") @db.VarChar(50)
+  notificationPreferences Json? @default("{}")
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  // Relations
+  organizations UserOrganization[]
+  refreshTokens RefreshToken[]
+  oauthAccounts OAuthAccount[]
+  auditLogs     AuditLog[]
+  athletes      Athlete[]
+  wellnessSurveys WellnessSurvey[]
+  
+  @@index([email])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model UserOrganization {
+  id       String @id @default(uuid())
+  userId   String
+  orgId    String @map("organization_id")
+  role     Role   @default(ATHLETE)
+  
+  // Metadata
+  joinedAt    DateTime @default(now())
+  leftAt      DateTime?
+  isPrimary   Boolean  @default(false) // Primary organization for the user
+  
+  // Permissions override (JSON for flexibility)
+  permissions Json? @default("{}")
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, orgId])
+  @@index([orgId, role])
+  @@index([userId])
+  @@map("user_organizations")
+}
+
+model Athlete {
+  id        String   @id @default(uuid())
+  orgId     String   @map("organization_id")
+  userId    String?  @unique @map("user_id") // Optional link to User account
+  
+  // Profile
+  firstName      String   @db.VarChar(50)
+  lastName       String   @db.VarChar(50)
+  displayName    String?  @db.VarChar(100)
+  email          String?  @db.VarChar(255)
+  phone          String?  @db.VarChar(20)
+  dateOfBirth    DateTime? @map("date_of_birth")
+  gender         Gender?
+  nationality    String?  @db.VarChar(2) // ISO country code
+  
+  // Medical
+  heightCm       Float?   @map("height_cm")
+  weightKg       Float?   @map("weight_kg")
+  dominantSide   String?  @db.VarChar(10) // LEFT, RIGHT, BOTH
+  bloodType      String?  @db.VarChar(5)
+  allergies      String?  @db.Text
+  medications    String?  @db.Text
+  medicalNotes   String?  @db.Text @map("medical_notes")
+  
+  // Sport
+  sportId   String?  @map("sport_id")
+  positionId String? @map("position_id")
+  jerseyNumber Int?  @map("jersey_number")
+  
+  // Status
+  status          AthleteStatus @default(ACTIVE)
+  injuryStatus    String?       @db.VarChar(50)
+  returnToPlayDate DateTime?    @map("return_to_play_date")
+  
+  // Dates
+  joinedDate    DateTime? @map("joined_date")
+  contractEnd   DateTime? @map("contract_end_date")
+  
+  // Emergency Contact
+  emergencyContactName    String? @db.VarChar(100) @map("emergency_contact_name")
+  emergencyContactPhone   String? @db.VarChar(20) @map("emergency_contact_phone")
+  emergencyContactRelation String? @db.VarChar(50) @map("emergency_contact_relation")
+  
+  // Meta
+  tags      String[] // Array of tags
+  notes     String?  @db.Text
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sport        Sport?       @relation(fields: [sportId], references: [id])
+  position     Position?    @relation(fields: [positionId], references: [id])
+  teams        TeamMember[]
+  wellnessSurveys WellnessSurvey[]
+  sessionLoads AthleteSessionLoad[]
+  loadCalculations AthleteLoadCalculation[]
+
+  @@index([orgId, status])
+  @@index([orgId, sportId])
+  @@index([lastName, firstName])
+  @@index([deletedAt])
+  @@map("athletes")
+}
+
+model Sport {
+  id          String   @id @default(uuid())
+  orgId       String   @map("organization_id")
+  name        String   @db.VarChar(50)
+  type        SportType
+  description String?  @db.Text
+  
+  // Config
+  config Json? // Sport-specific configuration (periods, duration, etc.)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  athletes     Athlete[]
+  positions    Position[]
+  teams        Team[]
+  trainingSessions TrainingSession[]
+  
+  @@unique([orgId, name])
+  @@map("sports")
+}
+
+model Position {
+  id          String @id @default(uuid())
+  sportId     String @map("sport_id")
+  name        String @db.VarChar(50)
+  abbreviation String? @db.VarChar(10)
+  category    PositionCategory @default(GENERAL)
+  description String? @db.Text
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  // Relations
+  sport    Sport     @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  athletes Athlete[]
+  
+  @@unique([sportId, name])
+  @@map("positions")
+}
+
+model Team {
+  id          String @id @default(uuid())
+  orgId       String @map("organization_id")
+  sportId     String? @map("sport_id")
+  name        String @db.VarChar(100)
+  category    String? @db.VarChar(50) // U18, Senior, Reserve, etc.
+  description String? @db.Text
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sport        Sport?       @relation(fields: [sportId], references: [id])
+  members      TeamMember[]
+  trainingSessions TrainingSession[]
+  
+  @@index([orgId])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String @id @default(uuid())
+  teamId    String @map("team_id")
+  athleteId String @map("athlete_id")
+  role      String @default("PLAYER") @db.VarChar(50) // PLAYER, CAPTAIN, etc.
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+  
+  team    Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  
+  @@unique([teamId, athleteId])
+  @@map("team_members")
+}
+
+// ==========================================================================
+// AUTH & SECURITY
+// ==========================================================================
+
+model RefreshToken {
+  id        String @id @default(uuid())
+  userId    String @map("user_id")
+  orgId     String? @map("organization_id") // Nullable for cross-org tokens
+  token     String @unique @db.VarChar(255)
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  revokedReason String? @db.VarChar(100) @map("revoked_reason")
+  ipAddress String? @db.VarChar(45) @map("ip_address")
+  userAgent String? @db.Text @map("user_agent")
+  createdAt DateTime @default(now())
+  
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model OAuthAccount {
+  id           String @id @default(uuid())
+  userId       String @map("user_id")
+  provider     String @db.VarChar(50) // google, microsoft, etc.
+  providerAccountId String @db.VarChar(255) @map("provider_account_id")
+  accessToken  String? @db.Text @map("access_token")
+  refreshToken String? @db.Text @map("refresh_token")
+  expiresAt    DateTime? @map("expires_at")
+  tokenType    String? @db.VarChar(50) @map("token_type")
+  scope        String? @db.Text
+  idToken      String? @db.Text @map("id_token")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([provider, providerAccountId])
+  @@map("oauth_accounts")
+}
+
+// ==========================================================================
+// AUDIT & COMPLIANCE
+// ==========================================================================
+
+model AuditLog {
+  id          String @id @default(uuid())
+  orgId       String? @map("organization_id")
+  userId      String? @map("user_id")
+  
+  action      AuditAction
+  entityType  String @db.VarChar(50) @map("entity_type") // athlete, user, injury, etc.
+  entityId    String? @db.VarChar(50) @map("entity_id")
+  
+  // Context
+  oldValues   Json? @map("old_values")
+  newValues   Json? @map("new_values")
+  description String? @db.Text
+  ipAddress   String? @db.VarChar(45) @map("ip_address")
+  userAgent   String? @db.Text @map("user_agent")
+  
+  // Medical data flag for GDPR/HIPAA
+  containsMedicalData Boolean @default(false) @map("contains_medical_data")
+  
+  createdAt DateTime @default(now())
+  
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([orgId, createdAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+// ==========================================================================
+// WELLNESS SURVEYS (Sprint 3)
+// ==========================================================================
+
+model WellnessSurvey {
+  id          String   @id @default(uuid())
+  orgId       String   @map("organization_id")
+  athleteId   String   @map("athlete_id")
+  surveyDate  DateTime @map("survey_date") @db.Date
+  
+  // Wellness Metrics (1-10 scale)
+  sleepQuality    Int? @map("sleep_quality")    @db.SmallInt
+  sleepHours      Float? @map("sleep_hours")
+  fatigueLevel    Int? @map("fatigue_level")    @db.SmallInt
+  mood            Int? @map("mood")              @db.SmallInt
+  stressLevel     Int? @map("stress_level")      @db.SmallInt
+  muscleSoreness  Int? @map("muscle_soreness")   @db.SmallInt
+  hydration       Int? @map("hydration")         @db.SmallInt
+  nutrition       Int? @map("nutrition")         @db.SmallInt
+  
+  // Computed
+  wellnessScore   Float? @map("wellness_score")
+  
+  // Context
+  illness         Boolean? @default(false)
+  injuryConcern   String?  @db.VarChar(255) @map("injury_concern")
+  notes           String?  @db.Text
+  
+  // Source
+  source          String   @default("WEB") @db.VarChar(20) // WEB, MOBILE, IMPORT
+  submittedById   String?  @map("submitted_by_id") // Coach/Staff who submitted on behalf
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  athlete      Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  submittedBy  User?        @relation(fields: [submittedById], references: [id], onDelete: SetNull)
+  
+  @@unique([athleteId, surveyDate])
+  @@index([orgId, surveyDate])
+  @@index([athleteId, surveyDate])
+  @@index([orgId, wellnessScore])
+  @@map("wellness_surveys")
+}
+
+// ==========================================================================
+// TRAINING LOAD (Sprint 3)
+// ==========================================================================
+
+enum SessionType {
+  TRAINING
+  MATCH
+  RECOVERY
+  REHABILITATION
+  STRENGTH
+  CONDITIONING
+  OTHER
+}
+
+enum IntensityLevel {
+  LOW
+  MODERATE
+  HIGH
+  VERY_HIGH
+}
+
+model TrainingSession {
+  id          String   @id @default(uuid())
+  orgId       String   @map("organization_id")
+  
+  // Session Details
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  sessionType SessionType @default(TRAINING) @map("session_type")
+  
+  // Timing
+  scheduledDate DateTime @map("scheduled_date") @db.Date
+  startTime     DateTime? @map("start_time")
+  endTime       DateTime? @map("end_time")
+  durationMinutes Int?   @map("duration_minutes")
+  
+  // Context
+  sportId     String?  @map("sport_id")
+  teamId      String?  @map("team_id")
+  location    String?  @db.VarChar(100)
+  
+  // Settings
+  plannedRpe  Int?     @map("planned_rpe") @db.SmallInt
+  plannedLoad Int?     @map("planned_load")
+  
+  // Status
+  status      String   @default("SCHEDULED") @db.VarChar(20) // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sport        Sport?       @relation(fields: [sportId], references: [id])
+  team         Team?        @relation(fields: [teamId], references: [id])
+  athleteLoads AthleteSessionLoad[]
+  
+  @@index([orgId, scheduledDate])
+  @@index([orgId, status])
+  @@index([teamId])
+  @@map("training_sessions")
+}
+
+model AthleteSessionLoad {
+  id          String   @id @default(uuid())
+  sessionId   String   @map("session_id")
+  athleteId   String   @map("athlete_id")
+  orgId       String   @map("organization_id")
+  
+  // RPE & Load
+  rpeScore    Int?     @map("rpe_score") @db.SmallInt // 1-10
+  durationMinutes Int? @map("duration_minutes")
+  totalLoad   Int?     @map("total_load") // RPE * duration
+  
+  // GPS / External Data
+  distanceMeters  Float? @map("distance_meters")
+  highSpeedDistance Float? @map("high_speed_distance")
+  sprintDistance  Float? @map("sprint_distance")
+  accelerations   Int?   @map("accelerations")
+  decelerations   Int?   @map("decelerations")
+  heartRateAvg    Int?   @map("heart_rate_avg")
+  heartRateMax    Int?   @map("heart_rate_max")
+  
+  // Wellness at session
+  wellnessPre  Int?    @map("wellness_pre") @db.SmallInt
+  wellnessPost Int?    @map("wellness_post") @db.SmallInt
+  
+  // Notes
+  notes       String?  @db.Text
+  injuryConcern Boolean @default(false) @map("injury_concern")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  session  TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  athlete  Athlete         @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@unique([sessionId, athleteId])
+  @@index([athleteId, createdAt])
+  @@index([orgId, createdAt])
+  @@map("athlete_session_loads")
+}
+// ==========================================================================
+// CALCULATIONS & ALGORITHMS (Sprint 4)
+// ==========================================================================
+
+enum WindowType {
+  ACUTE_7DAY
+  CHRONIC_21DAY
+  CHRONIC_28DAY
+  ROLLING_3DAY
+  ROLLING_5DAY
+}
+
+enum RiskLevel {
+  VERY_LOW    // ACWR < 0.8 (undertraining)
+  LOW         // 0.8 <= ACWR < 1.0 (optimal low)
+  MODERATE    // 1.0 <= ACWR < 1.3 (sweet spot)
+  HIGH        // 1.3 <= ACWR < 1.5 (danger zone)
+  VERY_HIGH   // ACWR >= 1.5 (extreme risk)
+}
+
+model AlgorithmConfiguration {
+  id          String @id @default(uuid())
+  orgId       String @unique @map("organization_id")
+  
+  // ACWR Settings
+  acuteWindowDays   Int @default(7) @map("acute_window_days")
+  chronicWindowDays Int @default(21) @map("chronic_window_days")
+  
+  // Thresholds (default from research)
+  veryLowThreshold  Float @default(0.8) @map("very_low_threshold")
+  lowThreshold      Float @default(1.0) @map("low_threshold")
+  moderateThreshold Float @default(1.3) @map("moderate_threshold")
+  highThreshold     Float @default(1.5) @map("high_threshold")
+  
+  // Feature flags
+  enableAcwr        Boolean @default(true) @map("enable_acwr")
+  enableEWMA        Boolean @default(false) @map("enable_ewma") // Exponentially Weighted Moving Average
+  ewmaConstant      Float?  @map("ewma_constant") // Tau for EWMA (default 0.5)
+  
+  // Calculated fields
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@map("algorithm_configurations")
+}
+
+model AthleteLoadCalculation {
+  id          String @id @default(uuid())
+  orgId       String @map("organization_id")
+  athleteId   String @map("athlete_id")
+  
+  // Date of calculation
+  calcDate    DateTime @map("calc_date") @db.Date
+  
+  // Raw values
+  acuteLoad     Float? @map("acute_load")
+  chronicLoad   Float? @map("chronic_load")
+  acuteWindowDays   Int @default(7) @map("acute_window_days")
+  chronicWindowDays Int @default(21) @map("chronic_window_days")
+  
+  // Ratios
+  acwr          Float? // Acute / Chronic
+  ewmaAcwr      Float? @map("ewma_acwr") // EWMA-based ACWR if enabled
+  
+  // Risk classification
+  riskLevel     String? @db.VarChar(20) // VERY_LOW, LOW, MODERATE, HIGH, VERY_HIGH
+  riskColor     String? @db.VarChar(7)  // Hex color
+  
+  // Components
+  totalSessions Int @default(0) @map("total_sessions")
+  totalDuration Int @default(0) @map("total_duration") // minutes
+  totalDistance Float? @map("total_distance")
+  avgRpe        Float? @map("avg_rpe")
+  
+  // Metadata
+  dataPoints    Int @default(0) @map("data_points") // Number of data points used
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  athlete      Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  
+  @@unique([athleteId, calcDate])
+  @@index([orgId, calcDate])
+  @@index([athleteId, calcDate])
+  @@index([orgId, riskLevel])
+  @@map("athlete_load_calculations")
+}

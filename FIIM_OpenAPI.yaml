@@ -1,0 +1,2955 @@
+openapi: 3.0.3
+info:
+  title: FIIM API
+  description: |
+    Fatigue Injury Index Monitoring (FIIM) REST API.
+    
+    This API provides endpoints for athlete monitoring, training load management,
+    injury risk calculation, and multi-disciplinary team collaboration.
+    
+    All endpoints are scoped by organization (multi-tenant). Include the 
+    `X-Organization-ID` header for every request, or use the user's default 
+    organization from the JWT token.
+    
+    Base URL: `https://api.fiim.io/v1`
+  version: 1.0.0
+  contact:
+    name: FIIM Engineering Team
+    email: api@fiim.io
+
+servers:
+  - url: https://api.fiim.io/v1
+    description: Production
+  - url: https://api-staging.fiim.io/v1
+    description: Staging
+  - url: https://api-dev.fiim.io/v1
+    description: Development
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+tags:
+  - name: Authentication
+    description: Login, logout, SSO, MFA, and session management
+  - name: Users
+    description: User management and RBAC
+  - name: Athletes
+    description: Athlete profiles, assignments, and consent
+  - name: Wellness
+    description: Daily wellness surveys and responses
+  - name: Training Load
+    description: Sessions, load records, and daily summaries
+  - name: Calculations
+    description: ACWR, risk indices, and readiness scores
+  - name: Injury Management
+    description: Injury cases, diagnoses, treatment, and clearance
+  - name: Alerts
+    description: Risk alerts and acknowledgments
+  - name: Reporting
+    description: Report templates, generation, and schedules
+  - name: Dashboard
+    description: Dashboard configurations and widget data
+  - name: Data Import
+    description: Bulk CSV and file uploads
+  - name: Audit
+    description: Audit log queries and exports
+
+paths:
+  # ==========================================================================
+  # AUTHENTICATION
+  # ==========================================================================
+  /auth/login:
+    post:
+      summary: Email/password login
+      tags: [Authentication]
+      security: [] # Public endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/logout:
+    post:
+      summary: Logout and revoke session
+      tags: [Authentication]
+      responses:
+        '204':
+          description: Logout successful
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: New token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/sso/{provider}/initiate:
+    get:
+      summary: Initiate SSO login (SAML/OIDC)
+      tags: [Authentication]
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [saml, oidc]
+        - name: organization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '302':
+          description: Redirect to identity provider
+
+  /auth/mfa/setup:
+    post:
+      summary: Setup MFA (TOTP)
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method:
+                  type: string
+                  enum: [totp, sms]
+      responses:
+        '200':
+          description: MFA setup initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret:
+                    type: string
+                  qr_code_url:
+                    type: string
+                  backup_codes:
+                    type: array
+                    items:
+                      type: string
+
+  /auth/mfa/verify:
+    post:
+      summary: Verify MFA code during login
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [temp_token, mfa_code]
+              properties:
+                temp_token:
+                  type: string
+                mfa_code:
+                  type: string
+      responses:
+        '200':
+          description: MFA verified, full token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  # ==========================================================================
+  # USERS & RBAC
+  # ==========================================================================
+  /users:
+    get:
+      summary: List users in organization
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+
+    post:
+      summary: Create user
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /users/{user_id}:
+    get:
+      summary: Get user details
+      tags: [Users]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+    patch:
+      summary: Update user
+      tags: [Users]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated
+
+    delete:
+      summary: Deactivate user (soft delete)
+      tags: [Users]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: User deactivated
+
+  /users/{user_id}/roles:
+    get:
+      summary: Get user role assignments
+      tags: [Users]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Role assignments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserRoleAssignment'
+
+    post:
+      summary: Assign role to user
+      tags: [Users]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleRequest'
+      responses:
+        '201':
+          description: Role assigned
+
+  /users/{user_id}/roles/{assignment_id}:
+    delete:
+      summary: Revoke role assignment
+      tags: [Users]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: assignment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Role revoked
+
+  # ==========================================================================
+  # ATHLETES
+  # ==========================================================================
+  /athletes:
+    get:
+      summary: List athletes
+      tags: [Athletes]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: team_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: squad_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, loaned, injured, suspended, retired, transferred]
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name or email
+      responses:
+        '200':
+          description: Paginated athlete list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Athlete'
+
+    post:
+      summary: Create athlete
+      tags: [Athletes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAthleteRequest'
+      responses:
+        '201':
+          description: Athlete created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+
+  /athletes/{athlete_id}:
+    get:
+      summary: Get athlete details
+      tags: [Athletes]
+      parameters:
+        - name: athlete_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Athlete details with latest indices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteDetail'
+
+    patch:
+      summary: Update athlete
+      tags: [Athletes]
+      parameters:
+        - name: athlete_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAthleteRequest'
+      responses:
+        '200':
+          description: Athlete updated
+
+    delete:
+      summary: Deactivate athlete
+      tags: [Athletes]
+      parameters:
+        - name: athlete_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Athlete deactivated
+
+  /athletes/{athlete_id}/consent:
+    get:
+      summary: Get athlete consent records
+      tags: [Athletes]
+      parameters:
+        - name: athlete_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Consent records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsentRecord'
+
+    post:
+      summary: Record consent
+      tags: [Athletes]
+      parameters:
+        - name: athlete_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConsentRequest'
+      responses:
+        '201':
+          description: Consent recorded
+
+  /athletes/bulk-import:
+    post:
+      summary: Bulk import athletes via CSV
+      tags: [Athletes]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                team_id:
+                  type: string
+                  format: uuid
+      responses:
+        '202':
+          description: Import job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [queued, processing]
+
+  # ==========================================================================
+  # WELLNESS
+  # ==========================================================================
+  /wellness/templates:
+    get:
+      summary: List wellness survey templates
+      tags: [Wellness]
+      responses:
+        '200':
+          description: Template list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WellnessSurveyTemplate'
+
+    post:
+      summary: Create wellness survey template
+      tags: [Wellness]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWellnessTemplateRequest'
+      responses:
+        '201':
+          description: Template created
+
+  /wellness/templates/{template_id}:
+    get:
+      summary: Get template details
+      tags: [Wellness]
+      parameters:
+        - name: template_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template details
+
+    patch:
+      summary: Update template
+      tags: [Wellness]
+      parameters:
+        - name: template_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWellnessTemplateRequest'
+      responses:
+        '200':
+          description: Template updated
+
+  /wellness/responses:
+    get:
+      summary: List wellness responses (with filters)
+      tags: [Wellness]
+      parameters:
+        - name: athlete_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated responses
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WellnessSurveyResponse'
+
+    post:
+      summary: Submit wellness response
+      tags: [Wellness]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitWellnessRequest'
+      responses:
+        '201':
+          description: Response submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WellnessSurveyResponse'
+        '422':
+          description: Validation error (outside time window or duplicate)
+
+  /wellness/responses/{response_id}:
+    get:
+      summary: Get response details
+      tags: [Wellness]
+      parameters:
+        - name: response_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Response details
+
+    patch:
+      summary: Edit response (within editable window)
+      tags: [Wellness]
+      parameters:
+        - name: response_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWellnessRequest'
+      responses:
+        '200':
+          description: Response updated
+        '403':
+          description: Edit window expired
+
+  # ==========================================================================
+  # TRAINING LOAD
+  # ==========================================================================
+  /sessions:
+    get:
+      summary: List training sessions
+      tags: [Training Load]
+      parameters:
+        - name: team_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: session_type
+          in: query
+          schema:
+            type: string
+            enum: [technical, tactical, strength, competition, recovery, rehab, travel]
+      responses:
+        '200':
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingSession'
+
+    post:
+      summary: Create training session
+      tags: [Training Load]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created
+
+  /sessions/{session_id}:
+    get:
+      summary: Get session details
+      tags: [Training Load]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session with load records
+
+    patch:
+      summary: Update session
+      tags: [Training Load]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionRequest'
+      responses:
+        '200':
+          description: Session updated
+
+  /sessions/{session_id}/load-records:
+    get:
+      summary: Get load records for session
+      tags: [Training Load]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Load records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionLoadRecord'
+
+    post:
+      summary: Add load record to session
+      tags: [Training Load]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLoadRecordRequest'
+      responses:
+        '201':
+          description: Load record added
+
+  /load/daily-summary:
+    get:
+      summary: Get daily load summaries
+      tags: [Training Load]
+      parameters:
+        - name: athlete_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Daily summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailyLoadSummary'
+
+  /load/weekly-summary:
+    get:
+      summary: Get weekly load aggregation
+      tags: [Training Load]
+      parameters:
+        - name: athlete_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: week_start
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Weekly summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyLoadSummary'
+
+  # ==========================================================================
+  # CALCULATIONS
+  # ==========================================================================
+  /calculations/acwr:
+    get:
+      summary: Calculate ACWR for athlete
+      tags: [Calculations]
+      parameters:
+        - name: athlete_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Defaults to today
+        - name: metric
+          in: query
+          schema:
+            type: string
+            enum: [srpe, distance, player_load]
+            default: srpe
+        - name: method
+          in: query
+          schema:
+            type: string
+            enum: [rolling, ewma]
+            default: rolling
+      responses:
+        '200':
+          description: ACWR calculation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ACWRResult'
+
+  /calculations/indices/{athlete_id}:
+    get:
+      summary: Get all daily indices for athlete
+      tags: [Calculations]
+      parameters:
+        - name: athlete_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Daily index calculations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyIndices'
+
+  /calculations/team-readiness:
+    get:
+      summary: Get team readiness grid
+      tags: [Calculations]
+      parameters:
+        - name: team_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Team readiness grid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  athletes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReadinessEntry'
+
+  /calculations/configs:
+    get:
+      summary: List calculation configurations
+      tags: [Calculations]
+      responses:
+        '200':
+          description: Configuration list
+
+    post:
+      summary: Create new calculation configuration
+      tags: [Calculations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalculationConfig'
+      responses:
+        '201':
+          description: Configuration created
+
+  # ==========================================================================
+  # INJURY MANAGEMENT
+  # ==========================================================================
+  /injuries:
+    get:
+      summary: List injury cases
+      tags: [Injury Management]
+      parameters:
+        - name: athlete_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, recovered, recurred, chronic]
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Injury cases (filtered by RBAC medical access)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InjuryCase'
+
+    post:
+      summary: Create injury case
+      tags: [Injury Management]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInjuryCaseRequest'
+      responses:
+        '201':
+          description: Injury case created
+
+  /injuries/{case_id}:
+    get:
+      summary: Get injury case details
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Case with diagnoses and treatment notes
+
+    patch:
+      summary: Update injury case
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInjuryCaseRequest'
+      responses:
+        '200':
+          description: Case updated
+
+  /injuries/{case_id}/diagnoses:
+    get:
+      summary: List diagnoses for case
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Diagnoses (filtered by confidentiality)
+
+    post:
+      summary: Add diagnosis
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDiagnosisRequest'
+      responses:
+        '201':
+          description: Diagnosis added
+
+  /injuries/{case_id}/treatment-notes:
+    get:
+      summary: List treatment notes
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Treatment notes
+
+    post:
+      summary: Add treatment note
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTreatmentNoteRequest'
+      responses:
+        '201':
+          description: Treatment note added
+
+  /injuries/{case_id}/rtp-stages:
+    get:
+      summary: Get return-to-play stages
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: RTP stages
+
+    post:
+      summary: Add/update RTP stage
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRTPStageRequest'
+      responses:
+        '201':
+          description: RTP stage added
+
+  /injuries/{case_id}/clearance:
+    post:
+      summary: Issue medical clearance
+      tags: [Injury Management]
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClearanceRequest'
+      responses:
+        '201':
+          description: Clearance issued
+
+  # ==========================================================================
+  # ALERTS
+  # ==========================================================================
+  /alerts:
+    get:
+      summary: List alerts
+      tags: [Alerts]
+      parameters:
+        - name: athlete_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [low, moderate, high, critical]
+        - name: is_acknowledged
+          in: query
+          schema:
+            type: boolean
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated alerts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Alert'
+
+  /alerts/{alert_id}/acknowledge:
+    post:
+      summary: Acknowledge alert
+      tags: [Alerts]
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                action_taken:
+                  type: string
+      responses:
+        '200':
+          description: Alert acknowledged
+
+  /alerts/{alert_id}/resolve:
+    post:
+      summary: Resolve alert
+      tags: [Alerts]
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Alert resolved
+
+  # ==========================================================================
+  # REPORTING
+  # ==========================================================================
+  /reports/templates:
+    get:
+      summary: List report templates
+      tags: [Reporting]
+      responses:
+        '200':
+          description: Templates
+
+    post:
+      summary: Create report template
+      tags: [Reporting]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportTemplate'
+      responses:
+        '201':
+          description: Template created
+
+  /reports/generate:
+    post:
+      summary: Generate report on-demand
+      tags: [Reporting]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateReportRequest'
+      responses:
+        '202':
+          description: Report generation queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instance_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [pending, generating]
+
+  /reports/instances/{instance_id}:
+    get:
+      summary: Get report instance status/download
+      tags: [Reporting]
+      parameters:
+        - name: instance_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Report status and download URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportInstance'
+
+  /reports/instances/{instance_id}/download:
+    get:
+      summary: Download generated report
+      tags: [Reporting]
+      parameters:
+        - name: instance_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '302':
+          description: Redirect to presigned download URL
+        '200':
+          description: Direct file download (binary)
+
+  /reports/schedules:
+    get:
+      summary: List scheduled reports
+      tags: [Reporting]
+      responses:
+        '200':
+          description: Schedule list
+
+    post:
+      summary: Create report schedule
+      tags: [Reporting]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportSchedule'
+      responses:
+        '201':
+          description: Schedule created
+
+  # ==========================================================================
+  # DASHBOARD
+  # ==========================================================================
+  /dashboard/config:
+    get:
+      summary: Get dashboard configuration
+      tags: [Dashboard]
+      parameters:
+        - name: dashboard_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [executive, coach, sport_scientist, athlete]
+      responses:
+        '200':
+          description: Dashboard config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardConfig'
+
+    patch:
+      summary: Update dashboard configuration
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDashboardConfigRequest'
+      responses:
+        '200':
+          description: Config updated
+
+  /dashboard/data:
+    get:
+      summary: Get dashboard widget data
+      tags: [Dashboard]
+      parameters:
+        - name: widget_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: team_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: date_range
+          in: query
+          schema:
+            type: string
+            enum: [today, last_7_days, last_14_days, last_30_days, season, custom]
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Widget data payload (varies by widget type)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  widget_id:
+                    type: string
+                  data:
+                    type: object
+
+  # ==========================================================================
+  # DATA IMPORT
+  # ==========================================================================
+  /import/upload:
+    post:
+      summary: Upload file for import (CSV, GPS, etc.)
+      tags: [Data Import]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                file_type:
+                  type: string
+                  enum: [csv, excel, fit, gpx]
+                mapping_config:
+                  type: string
+                  description: JSON string of column mappings
+      responses:
+        '202':
+          description: Upload accepted for processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  file_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+
+  /import/files/{file_id}:
+    get:
+      summary: Get import status and results
+      tags: [Data Import]
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Import status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataImportFile'
+
+  /import/files/{file_id}/errors:
+    get:
+      summary: Get import error details
+      tags: [Data Import]
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Error log
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      type: object
+
+  # ==========================================================================
+  # AUDIT
+  # ==========================================================================
+  /audit/logs:
+    get:
+      summary: Query audit logs
+      tags: [Audit]
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: event_type
+          in: query
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AuditLog'
+
+  /audit/export:
+    post:
+      summary: Request audit log export
+      tags: [Audit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date_from:
+                  type: string
+                  format: date-time
+                date_to:
+                  type: string
+                  format: date-time
+                format:
+                  type: string
+                  enum: [csv, json]
+                  default: csv
+      responses:
+        '202':
+          description: Export queued
+
+  # ==========================================================================
+  # ADMIN
+  # ==========================================================================
+  /admin/organizations:
+    get:
+      summary: List organizations (super admin)
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Organization list
+
+  /admin/organizations/{organization_id}:
+    get:
+      summary: Get organization details
+      tags: [Admin]
+      parameters:
+        - name: organization_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Organization details
+
+    patch:
+      summary: Update organization settings
+      tags: [Admin]
+      parameters:
+        - name: organization_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrganizationRequest'
+      responses:
+        '200':
+          description: Organization updated
+
+  /admin/users:
+    get:
+      summary: List all users across organizations (super admin)
+      tags: [Admin]
+      responses:
+        '200':
+          description: User list
+
+components:
+  # ==========================================================================
+  # SECURITY SCHEMES
+  # ==========================================================================
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from /auth/login or /auth/refresh
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for external integrations (public API v1)
+
+  # ==========================================================================
+  # PARAMETERS
+  # ==========================================================================
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: Page number for pagination
+
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Items per page (max 100)
+
+  # ==========================================================================
+  # RESPONSES
+  # ==========================================================================
+  responses:
+    UnauthorizedError:
+      description: Authentication required or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ForbiddenError:
+      description: Insufficient permissions for this resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimitError:
+      description: Too many requests
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ValidationError:
+      description: Invalid request parameters or body
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+  # ==========================================================================
+  # SCHEMAS
+  # ==========================================================================
+  schemas:
+    # ------------------------------------------------------------------------
+    # Base / Shared
+    # ------------------------------------------------------------------------
+    Error:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          example: https://api.fiim.io/errors/unauthorized
+        title:
+          type: string
+          example: Unauthorized
+        status:
+          type: integer
+          example: 401
+        detail:
+          type: string
+          example: Invalid or expired access token
+        instance:
+          type: string
+          example: /auth/login
+        trace_id:
+          type: string
+          example: abc123def456
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+                  code:
+                    type: string
+
+    PaginatedResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total_count:
+              type: integer
+            total_pages:
+              type: integer
+            has_next:
+              type: boolean
+            has_prev:
+              type: boolean
+
+    # ------------------------------------------------------------------------
+    # Authentication
+    # ------------------------------------------------------------------------
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 12
+        organization_id:
+          type: string
+          format: uuid
+          description: Optional if user belongs to multiple orgs
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 14400
+        user:
+          $ref: '#/components/schemas/User'
+
+    # ------------------------------------------------------------------------
+    # Users
+    # ------------------------------------------------------------------------
+    User:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [administrator, coach, sport_scientist, physiotherapist, sports_doctor, athlete]
+        organization_id:
+          type: string
+          format: uuid
+        mfa_enabled:
+          type: boolean
+        last_login:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      required: [email, first_name, last_name, role]
+      properties:
+        email:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [administrator, coach, sport_scientist, physiotherapist, sports_doctor, athlete]
+        team_id:
+          type: string
+          format: uuid
+        send_invitation:
+          type: boolean
+          default: true
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+        is_active:
+          type: boolean
+        mfa_enabled:
+          type: boolean
+
+    UserRoleAssignment:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+        scope_type:
+          type: string
+        scope_id:
+          type: string
+          format: uuid
+        effective_from:
+          type: string
+          format: date
+        effective_until:
+          type: string
+          format: date
+
+    AssignRoleRequest:
+      type: object
+      required: [role_id]
+      properties:
+        role_id:
+          type: string
+          format: uuid
+        scope_type:
+          type: string
+          default: organization
+        scope_id:
+          type: string
+          format: uuid
+        effective_from:
+          type: string
+          format: date
+        effective_until:
+          type: string
+          format: date
+
+    # ------------------------------------------------------------------------
+    # Athletes
+    # ------------------------------------------------------------------------
+    Athlete:
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        date_of_birth:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum: [male, female, mixed, other]
+        nationality:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        position:
+          type: string
+        jersey_number:
+          type: string
+        height_cm:
+          type: integer
+        weight_kg:
+          type: number
+        target_sleep_hours:
+          type: number
+        team_id:
+          type: string
+          format: uuid
+        team_name:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    AthleteDetail:
+      allOf:
+        - $ref: '#/components/schemas/Athlete'
+        - type: object
+          properties:
+            latest_indices:
+              $ref: '#/components/schemas/DailyIndices'
+            latest_wellness:
+              $ref: '#/components/schemas/WellnessSurveyResponse'
+            latest_load:
+              $ref: '#/components/schemas/DailyLoadSummary'
+            active_injuries:
+              type: array
+              items:
+                $ref: '#/components/schemas/InjuryCase'
+            consent_status:
+              type: string
+              enum: [granted, pending, withdrawn]
+
+    CreateAthleteRequest:
+      type: object
+      required: [first_name, last_name, date_of_birth]
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        date_of_birth:
+          type: string
+          format: date
+        gender:
+          type: string
+        nationality:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        position:
+          type: string
+        jersey_number:
+          type: string
+        height_cm:
+          type: integer
+        weight_kg:
+          type: number
+        target_sleep_hours:
+          type: number
+          default: 8.0
+        team_id:
+          type: string
+          format: uuid
+        emergency_contact_name:
+          type: string
+        emergency_contact_phone:
+          type: string
+        blood_type:
+          type: string
+        known_allergies:
+          type: string
+
+    UpdateAthleteRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        position:
+          type: string
+        jersey_number:
+          type: string
+        height_cm:
+          type: integer
+        weight_kg:
+          type: number
+        target_sleep_hours:
+          type: number
+        is_active:
+          type: boolean
+
+    ConsentRecord:
+      type: object
+      properties:
+        consent_id:
+          type: string
+          format: uuid
+        consent_type:
+          type: string
+        version:
+          type: string
+        granted_at:
+          type: string
+          format: date-time
+        granted_by:
+          type: string
+        withdrawn_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+
+    CreateConsentRequest:
+      type: object
+      required: [consent_type, version, granted_by]
+      properties:
+        consent_type:
+          type: string
+          enum: [monitoring, medical, research, marketing]
+        version:
+          type: string
+        document_url:
+          type: string
+        granted_by:
+          type: string
+        ip_address:
+          type: string
+
+    # ------------------------------------------------------------------------
+    # Wellness
+    # ------------------------------------------------------------------------
+    WellnessSurveyTemplate:
+      type: object
+      properties:
+        template_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        frequency:
+          type: string
+        active_window_start:
+          type: string
+        active_window_end:
+          type: string
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              question_id:
+                type: string
+              text:
+                type: string
+              type:
+                type: string
+              scale_min:
+                type: integer
+              scale_max:
+                type: integer
+              weight:
+                type: number
+        is_default:
+          type: boolean
+        is_active:
+          type: boolean
+
+    CreateWellnessTemplateRequest:
+      type: object
+      required: [name, questions]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        frequency:
+          type: string
+        active_window_start:
+          type: string
+        active_window_end:
+          type: string
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              type:
+                type: string
+              scale_min:
+                type: integer
+              scale_max:
+                type: integer
+              weight:
+                type: number
+
+    UpdateWellnessTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        is_active:
+          type: boolean
+        questions:
+          type: array
+
+    WellnessSurveyResponse:
+      type: object
+      properties:
+        response_id:
+          type: string
+          format: uuid
+        athlete_id:
+          type: string
+          format: uuid
+        survey_date:
+          type: string
+          format: date
+        submitted_at:
+          type: string
+          format: date-time
+        responses:
+          type: object
+          additionalProperties: true
+        calculated_wellness_index:
+          type: number
+        wellness_index_confidence:
+          type: string
+        is_editable:
+          type: boolean
+
+    SubmitWellnessRequest:
+      type: object
+      required: [athlete_id, template_id, survey_date, responses]
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        survey_date:
+          type: string
+          format: date
+        responses:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            fatigue: 3
+            sleep_quality: 4
+            soreness: 2
+
+    UpdateWellnessRequest:
+      type: object
+      properties:
+        responses:
+          type: object
+          additionalProperties:
+            type: number
+        edit_reason:
+          type: string
+
+    # ------------------------------------------------------------------------
+    # Training Load
+    # ------------------------------------------------------------------------
+    TrainingSession:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        team_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        session_type:
+          type: string
+        scheduled_date:
+          type: string
+          format: date
+        scheduled_start:
+          type: string
+        scheduled_end:
+          type: string
+        location:
+          type: string
+        planned_rpe:
+          type: number
+        planned_duration:
+          type: integer
+        status:
+          type: string
+        load_records_count:
+          type: integer
+
+    CreateSessionRequest:
+      type: object
+      required: [team_id, name, scheduled_date]
+      properties:
+        team_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        session_type:
+          type: string
+          default: technical
+        scheduled_date:
+          type: string
+          format: date
+        scheduled_start:
+          type: string
+        scheduled_end:
+          type: string
+        location:
+          type: string
+        planned_rpe:
+          type: number
+        planned_duration:
+          type: integer
+
+    UpdateSessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        scheduled_start:
+          type: string
+        scheduled_end:
+          type: string
+        actual_start:
+          type: string
+          format: date-time
+        actual_end:
+          type: string
+          format: date-time
+        status:
+          type: string
+
+    SessionLoadRecord:
+      type: object
+      properties:
+        load_record_id:
+          type: string
+          format: uuid
+        athlete_id:
+          type: string
+          format: uuid
+        athlete_name:
+          type: string
+        session_rpe:
+          type: number
+        session_duration_minutes:
+          type: integer
+        srpe:
+          type: integer
+        total_distance_m:
+          type: integer
+        hsr_distance_m:
+          type: integer
+        sprint_distance_m:
+          type: integer
+        player_load_au:
+          type: integer
+        data_source:
+          type: string
+
+    CreateLoadRecordRequest:
+      type: object
+      required: [athlete_id]
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        session_rpe:
+          type: number
+        session_duration_minutes:
+          type: integer
+        total_distance_m:
+          type: integer
+        hsr_distance_m:
+          type: integer
+        sprint_distance_m:
+          type: integer
+        player_load_au:
+          type: integer
+        accelerations_count:
+          type: integer
+        decelerations_count:
+          type: integer
+        data_source:
+          type: string
+          default: manual
+
+    DailyLoadSummary:
+      type: object
+      properties:
+        summary_id:
+          type: string
+          format: uuid
+        summary_date:
+          type: string
+          format: date
+        total_srpe:
+          type: integer
+        total_distance_m:
+          type: integer
+        total_hsr_m:
+          type: integer
+        total_sprint_m:
+          type: integer
+        total_player_load:
+          type: integer
+        session_count:
+          type: integer
+        rest_day:
+          type: boolean
+        data_completeness_pct:
+          type: number
+
+    WeeklyLoadSummary:
+      type: object
+      properties:
+        week_start:
+          type: string
+          format: date
+        week_end:
+          type: string
+          format: date
+        total_srpe:
+          type: integer
+        total_distance_m:
+          type: integer
+        total_sessions:
+          type: integer
+        rest_days:
+          type: integer
+        planned_vs_actual_variance:
+          type: number
+
+    # ------------------------------------------------------------------------
+    # Calculations
+    # ------------------------------------------------------------------------
+    ACWRResult:
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        calculation_date:
+          type: string
+          format: date
+        metric:
+          type: string
+        method:
+          type: string
+        acute_load:
+          type: number
+        chronic_mean:
+          type: number
+        acwr_ratio:
+          type: number
+        zone:
+          type: string
+          enum: [underload, optimal, high, very_high]
+        confidence:
+          type: string
+
+    DailyIndices:
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        calculation_date:
+          type: string
+          format: date
+        wellness_index:
+          type: number
+        fatigue_index:
+          type: number
+        recovery_index:
+          type: number
+        workload_index:
+          type: number
+        acwr_ratio:
+          type: number
+        readiness_index:
+          type: number
+        injury_risk_index:
+          type: number
+        risk_zone:
+          type: string
+          enum: [green, yellow, red, crimson]
+        readiness_zone:
+          type: string
+          enum: [green, yellow, amber, red]
+        components:
+          type: object
+
+    ReadinessEntry:
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        athlete_name:
+          type: string
+        position:
+          type: string
+        readiness_index:
+          type: number
+        readiness_zone:
+          type: string
+        risk_zone:
+          type: string
+        acwr_ratio:
+          type: number
+        wellness_index:
+          type: number
+        fatigue_index:
+          type: number
+        recovery_index:
+          type: number
+        injury_status:
+          type: string
+        medical_clearance:
+          type: string
+        availability_status:
+          type: string
+
+    CalculationConfig:
+      type: object
+      properties:
+        config_id:
+          type: string
+          format: uuid
+        config_type:
+          type: string
+        version:
+          type: string
+        parameters:
+          type: object
+        is_default:
+          type: boolean
+        effective_from:
+          type: string
+          format: date
+
+    # ------------------------------------------------------------------------
+    # Injury Management
+    # ------------------------------------------------------------------------
+    InjuryCase:
+      type: object
+      properties:
+        case_id:
+          type: string
+          format: uuid
+        athlete_id:
+          type: string
+          format: uuid
+        athlete_name:
+          type: string
+        reported_at:
+          type: string
+          format: date-time
+        mechanism:
+          type: string
+        injury_site:
+          type: string
+        tissue_type:
+          type: string
+        severity:
+          type: string
+        status:
+          type: string
+        estimated_days_lost:
+          type: integer
+        actual_days_lost:
+          type: integer
+        current_rtp_stage:
+          type: string
+        medical_clearance:
+          type: string
+
+    CreateInjuryCaseRequest:
+      type: object
+      required: [athlete_id, mechanism, injury_site, tissue_type]
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        mechanism:
+          type: string
+        injury_site:
+          type: string
+        tissue_type:
+          type: string
+        severity:
+          type: string
+        initial_estimated_days_lost:
+          type: integer
+
+    UpdateInjuryCaseRequest:
+      type: object
+      properties:
+        severity:
+          type: string
+        status:
+          type: string
+        actual_days_lost:
+          type: integer
+
+    CreateDiagnosisRequest:
+      type: object
+      required: [primary_diagnosis, diagnosed_by]
+      properties:
+        primary_diagnosis:
+          type: string
+        secondary_diagnosis:
+          type: string
+        diagnosis_code:
+          type: string
+        imaging_required:
+          type: boolean
+        imaging_type:
+          type: string
+        prognosis:
+          type: string
+        estimated_return_weeks:
+          type: integer
+        confidentiality_level:
+          type: string
+
+    CreateTreatmentNoteRequest:
+      type: object
+      required: [treatment_type]
+      properties:
+        treatment_type:
+          type: string
+        interventions:
+          type: array
+        objective_measures:
+          type: object
+        subjective_notes:
+          type: string
+        pain_score:
+          type: integer
+        is_medical_hold_updated:
+          type: boolean
+
+    CreateRTPStageRequest:
+      type: object
+      required: [stage_number, stage_name]
+      properties:
+        stage_number:
+          type: integer
+        stage_name:
+          type: string
+        objective_criteria:
+          type: array
+        criteria_results:
+          type: object
+        clearance_required:
+          type: boolean
+
+    CreateClearanceRequest:
+      type: object
+      required: [cleared_by, clearance_type]
+      properties:
+        cleared_by:
+          type: string
+          format: uuid
+        clearance_type:
+          type: string
+        restrictions:
+          type: array
+        expires_at:
+          type: string
+          format: date-time
+        follow_up_required:
+          type: boolean
+        follow_up_date:
+          type: string
+          format: date
+        clinical_rationale:
+          type: string
+
+    # ------------------------------------------------------------------------
+    # Alerts
+    # ------------------------------------------------------------------------
+    Alert:
+      type: object
+      properties:
+        alert_id:
+          type: string
+          format: uuid
+        alert_type:
+          type: string
+        severity:
+          type: string
+        athlete_id:
+          type: string
+          format: uuid
+        athlete_name:
+          type: string
+        triggered_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+        recommended_action:
+          type: string
+        is_acknowledged:
+          type: boolean
+        acknowledged_by:
+          type: string
+        acknowledged_at:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------------
+    # Reporting
+    # ------------------------------------------------------------------------
+    ReportTemplate:
+      type: object
+      properties:
+        template_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        report_type:
+          type: string
+        modules_included:
+          type: array
+        filters:
+          type: object
+        layout_config:
+          type: object
+        branding:
+          type: object
+
+    GenerateReportRequest:
+      type: object
+      required: [template_id, date_range_start, date_range_end]
+      properties:
+        template_id:
+          type: string
+          format: uuid
+        date_range_start:
+          type: string
+          format: date
+        date_range_end:
+          type: string
+          format: date
+        team_id:
+          type: string
+          format: uuid
+        format:
+          type: string
+          enum: [pdf, excel, csv]
+
+    ReportInstance:
+      type: object
+      properties:
+        instance_id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        format:
+          type: string
+        file_size_bytes:
+          type: integer
+        download_url:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        generated_at:
+          type: string
+          format: date-time
+
+    ReportSchedule:
+      type: object
+      properties:
+        schedule_id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        frequency:
+          type: string
+        day_of_week:
+          type: integer
+        time_of_day:
+          type: string
+        recipient_emails:
+          type: array
+          items:
+            type: string
+
+    # ------------------------------------------------------------------------
+    # Dashboard
+    # ------------------------------------------------------------------------
+    DashboardConfig:
+      type: object
+      properties:
+        config_id:
+          type: string
+          format: uuid
+        dashboard_type:
+          type: string
+        widget_layout:
+          type: object
+        default_filters:
+          type: object
+        date_range_default:
+          type: string
+        auto_refresh_interval_seconds:
+          type: integer
+
+    UpdateDashboardConfigRequest:
+      type: object
+      properties:
+        widget_layout:
+          type: object
+        default_filters:
+          type: object
+        date_range_default:
+          type: string
+        auto_refresh_interval_seconds:
+          type: integer
+
+    # ------------------------------------------------------------------------
+    # Data Import
+    # ------------------------------------------------------------------------
+    DataImportFile:
+      type: object
+      properties:
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        file_type:
+          type: string
+        file_size_bytes:
+          type: integer
+        row_count:
+          type: integer
+        processed_count:
+          type: integer
+        error_count:
+          type: integer
+        status:
+          type: string
+        uploaded_at:
+          type: string
+          format: date-time
+        processed_at:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------------
+    # Audit
+    # ------------------------------------------------------------------------
+    AuditLog:
+      type: object
+      properties:
+        audit_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+        ip_address:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        outcome:
+          type: string
+
+    # ------------------------------------------------------------------------
+    # Admin
+    # ------------------------------------------------------------------------
+    UpdateOrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        subscription_tier:
+          type: string
+        data_retention_days:
+          type: integer
+        is_active:
+          type: boolean

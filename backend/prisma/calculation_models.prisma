@@ -1,0 +1,92 @@
+// ==========================================================================
+// CALCULATIONS & ALGORITHMS (Sprint 4)
+// ==========================================================================
+
+enum WindowType {
+  ACUTE_7DAY
+  CHRONIC_21DAY
+  CHRONIC_28DAY
+  ROLLING_3DAY
+  ROLLING_5DAY
+}
+
+enum RiskLevel {
+  VERY_LOW    // ACWR < 0.8 (undertraining)
+  LOW         // 0.8 <= ACWR < 1.0 (optimal low)
+  MODERATE    // 1.0 <= ACWR < 1.3 (sweet spot)
+  HIGH        // 1.3 <= ACWR < 1.5 (danger zone)
+  VERY_HIGH   // ACWR >= 1.5 (extreme risk)
+}
+
+model AlgorithmConfiguration {
+  id          String @id @default(uuid())
+  orgId       String @unique @map("organization_id")
+  
+  // ACWR Settings
+  acuteWindowDays   Int @default(7) @map("acute_window_days")
+  chronicWindowDays Int @default(21) @map("chronic_window_days")
+  
+  // Thresholds (default from research)
+  veryLowThreshold  Float @default(0.8) @map("very_low_threshold")
+  lowThreshold      Float @default(1.0) @map("low_threshold")
+  moderateThreshold Float @default(1.3) @map("moderate_threshold")
+  highThreshold     Float @default(1.5) @map("high_threshold")
+  
+  // Feature flags
+  enableAcwr        Boolean @default(true) @map("enable_acwr")
+  enableEWMA        Boolean @default(false) @map("enable_ewma") // Exponentially Weighted Moving Average
+  ewmaConstant      Float?  @map("ewma_constant") // Tau for EWMA (default 0.5)
+  
+  // Calculated fields
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@map("algorithm_configurations")
+}
+
+model AthleteLoadCalculation {
+  id          String @id @default(uuid())
+  orgId       String @map("organization_id")
+  athleteId   String @map("athlete_id")
+  
+  // Date of calculation
+  calcDate    DateTime @map("calc_date") @db.Date
+  
+  // Raw values
+  acuteLoad     Float? @map("acute_load")
+  chronicLoad   Float? @map("chronic_load")
+  acuteWindowDays   Int @default(7) @map("acute_window_days")
+  chronicWindowDays Int @default(21) @map("chronic_window_days")
+  
+  // Ratios
+  acwr          Float? // Acute / Chronic
+  ewmaAcwr      Float? @map("ewma_acwr") // EWMA-based ACWR if enabled
+  
+  // Risk classification
+  riskLevel     String? @db.VarChar(20) // VERY_LOW, LOW, MODERATE, HIGH, VERY_HIGH
+  riskColor     String? @db.VarChar(7)  // Hex color
+  
+  // Components
+  totalSessions Int @default(0) @map("total_sessions")
+  totalDuration Int @default(0) @map("total_duration") // minutes
+  totalDistance Float? @map("total_distance")
+  avgRpe        Float? @map("avg_rpe")
+  
+  // Metadata
+  dataPoints    Int @default(0) @map("data_points") // Number of data points used
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  athlete      Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  
+  @@unique([athleteId, calcDate])
+  @@index([orgId, calcDate])
+  @@index([athleteId, calcDate])
+  @@index([orgId, riskLevel])
+  @@map("athlete_load_calculations")
+}

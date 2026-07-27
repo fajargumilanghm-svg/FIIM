@@ -1,0 +1,153 @@
+
+// ==========================================================================
+// WELLNESS SURVEYS (Sprint 3)
+// ==========================================================================
+
+model WellnessSurvey {
+  id          String   @id @default(uuid())
+  orgId       String   @map("organization_id")
+  athleteId   String   @map("athlete_id")
+  surveyDate  DateTime @map("survey_date") @db.Date
+  
+  // Wellness Metrics (1-10 scale)
+  sleepQuality    Int? @map("sleep_quality")    @db.SmallInt
+  sleepHours      Float? @map("sleep_hours")
+  fatigueLevel    Int? @map("fatigue_level")    @db.SmallInt
+  mood            Int? @map("mood")              @db.SmallInt
+  stressLevel     Int? @map("stress_level")      @db.SmallInt
+  muscleSoreness  Int? @map("muscle_soreness")   @db.SmallInt
+  hydration       Int? @map("hydration")         @db.SmallInt
+  nutrition       Int? @map("nutrition")         @db.SmallInt
+  
+  // Computed
+  wellnessScore   Float? @map("wellness_score")
+  
+  // Context
+  illness         Boolean? @default(false)
+  injuryConcern   String?  @db.VarChar(255) @map("injury_concern")
+  notes           String?  @db.Text
+  
+  // Source
+  source          String   @default("WEB") @db.VarChar(20) // WEB, MOBILE, IMPORT
+  submittedById   String?  @map("submitted_by_id") // Coach/Staff who submitted on behalf
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  athlete      Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  submittedBy  User?        @relation(fields: [submittedById], references: [id], onDelete: SetNull)
+  
+  @@unique([athleteId, surveyDate])
+  @@index([orgId, surveyDate])
+  @@index([athleteId, surveyDate])
+  @@index([orgId, wellnessScore])
+  @@map("wellness_surveys")
+}
+
+// ==========================================================================
+// TRAINING LOAD (Sprint 3)
+// ==========================================================================
+
+enum SessionType {
+  TRAINING
+  MATCH
+  RECOVERY
+  REHABILITATION
+  STRENGTH
+  CONDITIONING
+  OTHER
+}
+
+enum IntensityLevel {
+  LOW
+  MODERATE
+  HIGH
+  VERY_HIGH
+}
+
+model TrainingSession {
+  id          String   @id @default(uuid())
+  orgId       String   @map("organization_id")
+  
+  // Session Details
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  sessionType SessionType @default(TRAINING) @map("session_type")
+  
+  // Timing
+  scheduledDate DateTime @map("scheduled_date") @db.Date
+  startTime     DateTime? @map("start_time")
+  endTime       DateTime? @map("end_time")
+  durationMinutes Int?   @map("duration_minutes")
+  
+  // Context
+  sportId     String?  @map("sport_id")
+  teamId      String?  @map("team_id")
+  location    String?  @db.VarChar(100)
+  
+  // Settings
+  plannedRpe  Int?     @map("planned_rpe") @db.SmallInt
+  plannedLoad Int?     @map("planned_load")
+  
+  // Status
+  status      String   @default("SCHEDULED") @db.VarChar(20) // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sport        Sport?       @relation(fields: [sportId], references: [id])
+  team         Team?        @relation(fields: [teamId], references: [id])
+  athleteLoads AthleteSessionLoad[]
+  
+  @@index([orgId, scheduledDate])
+  @@index([orgId, status])
+  @@index([teamId])
+  @@map("training_sessions")
+}
+
+model AthleteSessionLoad {
+  id          String   @id @default(uuid())
+  sessionId   String   @map("session_id")
+  athleteId   String   @map("athlete_id")
+  orgId       String   @map("organization_id")
+  
+  // RPE & Load
+  rpeScore    Int?     @map("rpe_score") @db.SmallInt // 1-10
+  durationMinutes Int? @map("duration_minutes")
+  totalLoad   Int?     @map("total_load") // RPE * duration
+  
+  // GPS / External Data
+  distanceMeters  Float? @map("distance_meters")
+  highSpeedDistance Float? @map("high_speed_distance")
+  sprintDistance  Float? @map("sprint_distance")
+  accelerations   Int?   @map("accelerations")
+  decelerations   Int?   @map("decelerations")
+  heartRateAvg    Int?   @map("heart_rate_avg")
+  heartRateMax    Int?   @map("heart_rate_max")
+  
+  // Wellness at session
+  wellnessPre  Int?    @map("wellness_pre") @db.SmallInt
+  wellnessPost Int?    @map("wellness_post") @db.SmallInt
+  
+  // Notes
+  notes       String?  @db.Text
+  injuryConcern Boolean @default(false) @map("injury_concern")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  session  TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  athlete  Athlete         @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@unique([sessionId, athleteId])
+  @@index([athleteId, createdAt])
+  @@index([orgId, createdAt])
+  @@map("athlete_session_loads")
+}
