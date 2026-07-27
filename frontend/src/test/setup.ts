@@ -2,6 +2,15 @@
 // their TypeScript augmentation so matchers like `toBeInTheDocument` typecheck.
 import '@testing-library/jest-dom/vitest'
 
+// Recharts' ResponsiveContainer relies on ResizeObserver, which jsdom lacks.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as any
+}
+
 // jsdom does not enable Web Storage without an origin; provide a simple
 // in-memory localStorage so store/service code under test can run.
 if (typeof globalThis.localStorage === 'undefined') {
