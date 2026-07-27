@@ -16,6 +16,7 @@ const AthleteFormPage = lazy(() => import('./modules/athletes/pages/AthleteFormP
 const WellnessPage = lazy(() => import('./modules/wellness/pages/WellnessPage'))
 const TrainingLoadPage = lazy(() => import('./modules/training-load/pages/TrainingLoadPage'))
 const AlertsPage = lazy(() => import('./modules/alerts/pages/AlertsPage'))
+const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'))
 const NotFoundPage = lazy(() => import('./modules/common/pages/NotFoundPage'))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -50,7 +51,7 @@ function App() {
             <Route path="training" element={<TrainingLoadPage />} />
             <Route path="wellness" element={<WellnessPage />} />
             <Route path="alerts" element={<AlertsPage />} />
-            <Route path="settings" element={<PlaceholderPage title="Settings" />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
 
           {/* 404 */}
@@ -58,20 +59,6 @@ function App() {
         </Routes>
       </Suspense>
     </ErrorBoundary>
-  )
-}
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="rounded-full bg-fiim-sky/10 p-4">
-        <div className="h-8 w-8 animate-pulse rounded-full bg-fiim-sky" />
-      </div>
-      <h3 className="mt-4 text-lg font-medium text-fiim-slate">{title}</h3>
-      <p className="mt-1 text-sm text-muted-foreground">
-        This feature is coming in a future sprint.
-      </p>
-    </div>
   )
 }
 

@@ -180,6 +180,17 @@ class ApiService {
     const response = await this.client.patch(`/alerts/${id}/resolve`, { note }, { params: { orgId } })
     return response.data
   }
+
+  // Algorithm configuration (Settings)
+  async getAlgorithmConfig(orgId: string) {
+    const response = await this.client.get('/calculations/config', { params: { orgId } })
+    return response.data
+  }
+
+  async updateAlgorithmConfig(orgId: string, data: any) {
+    const response = await this.client.post('/calculations/config', data, { params: { orgId } })
+    return response.data
+  }
 }
 
 export const apiService = new ApiService()
