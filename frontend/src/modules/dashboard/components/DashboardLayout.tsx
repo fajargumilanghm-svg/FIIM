@@ -9,6 +9,7 @@ import {
   HeartPulse,
   FileText,
   ScrollText,
+  Upload,
   Settings,
   LogOut,
   ChevronDown,
@@ -26,6 +27,7 @@ const navigation = [
   { name: 'Alerts', href: '/alerts', icon: Bell },
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Audit', href: '/audit', icon: ScrollText },
+  { name: 'Import', href: '/import', icon: Upload },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

@@ -181,6 +181,17 @@ class ApiService {
     return response.data
   }
 
+  // Import endpoints
+  async previewWellnessImport(csv: string) {
+    const response = await this.client.post('/import/wellness/preview', { csv })
+    return response.data
+  }
+
+  async importWellness(orgId: string, csv: string) {
+    const response = await this.client.post('/import/wellness', { csv }, { params: { orgId } })
+    return response.data
+  }
+
   // Audit endpoints
   async getAuditLogs(
     orgId: string,
