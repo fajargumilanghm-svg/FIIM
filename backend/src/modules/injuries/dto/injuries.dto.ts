@@ -72,6 +72,11 @@ export class UpdateInjuryDto {
 }
 
 export class InjuryQueryDto {
+  // Passed alongside filters; declared so the whitelisting pipe allows it.
+  @IsOptional()
+  @IsString()
+  orgId?: string
+
   @IsOptional()
   @IsEnum(InjuryStatus)
   status?: InjuryStatus

@@ -2,6 +2,11 @@ import { IsOptional, IsString, IsEnum, IsInt, Min, Max } from 'class-validator'
 import { AuditAction } from '@prisma/client'
 
 export class AuditQueryDto {
+  // Passed alongside filters; declared so the whitelisting pipe allows it.
+  @IsOptional()
+  @IsString()
+  orgId?: string
+
   @IsOptional()
   @IsEnum(AuditAction)
   action?: AuditAction
