@@ -127,6 +127,8 @@ export class ReportPdfService {
     const puppeteer = await import('puppeteer')
     const browser = await puppeteer.launch({
       headless: true,
+      // Honour a system Chromium (set in the Docker image) when provided.
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     })
     try {
