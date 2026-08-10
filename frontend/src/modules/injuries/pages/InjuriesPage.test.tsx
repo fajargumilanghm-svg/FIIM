@@ -12,6 +12,12 @@ vi.mock('../../../services/api.service', () => ({
     getAthletes: vi.fn(),
     updateInjury: vi.fn(),
     createInjury: vi.fn(),
+    getInjuryCase: vi.fn(),
+    startRtp: vi.fn(),
+    advanceRtp: vi.fn(),
+    addDiagnosis: vi.fn(),
+    addTreatmentNote: vi.fn(),
+    addClearance: vi.fn(),
   },
 }))
 
@@ -46,6 +52,19 @@ beforeEach(() => {
   ;(apiService.getAthletes as any).mockResolvedValue([{ id: 'a1', firstName: 'A', lastName: 'B' }])
   ;(apiService.updateInjury as any).mockResolvedValue({})
   ;(apiService.createInjury as any).mockResolvedValue({})
+  ;(apiService.getInjuryCase as any).mockResolvedValue({
+    id: 'i1',
+    athlete: { firstName: 'A', lastName: 'B' },
+    bodyPart: 'Left hamstring',
+    status: 'RECOVERING',
+    severity: 'MODERATE',
+    currentRtpStage: 'RECONDITIONING',
+    medicalHold: false,
+    clinicalAccess: true,
+    diagnoses: [],
+    treatmentNotes: [],
+    clearances: [],
+  })
 })
 
 describe('InjuriesPage', () => {
@@ -65,6 +84,19 @@ describe('InjuriesPage', () => {
     await waitFor(() =>
       expect(apiService.updateInjury).toHaveBeenCalledWith('i1', 'org', { status: 'RECOVERING' }),
     )
+  })
+
+  it('opens the injury case drawer with the RTP stepper and clinical panels', async () => {
+    renderPage()
+    await screen.findByText(/Left hamstring/)
+    fireEvent.click(screen.getByRole('button', { name: /view case/i }))
+
+    // RTP stages render
+    expect(await screen.findByText('Return-to-play')).toBeInTheDocument()
+    expect(screen.getByText('Reconditioning')).toBeInTheDocument()
+    // Medical staff sees clinical sections
+    expect(screen.getByText('Diagnoses')).toBeInTheDocument()
+    expect(screen.getByText('Medical clearances')).toBeInTheDocument()
   })
 
   it('opens the report-injury form', async () => {

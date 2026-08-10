@@ -155,6 +155,14 @@ class ApiService {
     return response.data
   }
 
+  // Calculations: team ACWR + Monotony/Strain snapshot
+  async getCalcTeamSummary(orgId: string, date?: string) {
+    const response = await this.client.get('/calculations/team-summary', {
+      params: { orgId, date },
+    })
+    return response.data
+  }
+
   // Alerts endpoints
   async getAlerts(orgId: string, params?: { status?: string; severity?: string; athleteId?: string }) {
     const response = await this.client.get('/alerts', { params: { orgId, ...params } })
@@ -178,6 +186,37 @@ class ApiService {
 
   async resolveAlert(id: string, orgId: string, note?: string) {
     const response = await this.client.patch(`/alerts/${id}/resolve`, { note }, { params: { orgId } })
+    return response.data
+  }
+
+  // Notifications
+  async getNotifications(unread = false) {
+    const response = await this.client.get('/notifications', { params: { unread } })
+    return response.data
+  }
+
+  async getUnreadNotificationCount() {
+    const response = await this.client.get('/notifications/unread-count')
+    return response.data
+  }
+
+  async markNotificationRead(id: string) {
+    const response = await this.client.patch(`/notifications/${id}/read`, {})
+    return response.data
+  }
+
+  async markAllNotificationsRead() {
+    const response = await this.client.patch('/notifications/read-all', {})
+    return response.data
+  }
+
+  async getNotificationPreferences(orgId: string) {
+    const response = await this.client.get('/notifications/preferences', { params: { orgId } })
+    return response.data
+  }
+
+  async updateNotificationPreferences(orgId: string, data: any) {
+    const response = await this.client.post('/notifications/preferences', data, { params: { orgId } })
     return response.data
   }
 
@@ -236,6 +275,50 @@ class ApiService {
     return response.data
   }
 
+  // Generated PDF/CSV reports
+  async generateTeamSummaryReport(orgId: string, format: 'pdf' | 'csv' = 'pdf') {
+    const response = await this.client.post(
+      '/reports/generate/team-summary',
+      {},
+      { params: { orgId, format } },
+    )
+    return response.data
+  }
+
+  async getReportHistory(orgId: string) {
+    const response = await this.client.get('/reports/history', { params: { orgId } })
+    return response.data
+  }
+
+  async downloadReport(id: string, orgId: string): Promise<Blob> {
+    const response = await this.client.get(`/reports/${id}/download`, {
+      params: { orgId },
+      responseType: 'blob',
+    })
+    return response.data
+  }
+
+  // Scheduled reports
+  async getReportSchedules(orgId: string) {
+    const response = await this.client.get('/reports/schedules', { params: { orgId } })
+    return response.data
+  }
+
+  async createReportSchedule(orgId: string, data: any) {
+    const response = await this.client.post('/reports/schedules', data, { params: { orgId } })
+    return response.data
+  }
+
+  async updateReportSchedule(id: string, orgId: string, data: any) {
+    const response = await this.client.patch(`/reports/schedules/${id}`, data, { params: { orgId } })
+    return response.data
+  }
+
+  async deleteReportSchedule(id: string, orgId: string) {
+    const response = await this.client.delete(`/reports/schedules/${id}`, { params: { orgId } })
+    return response.data
+  }
+
   // Injuries endpoints
   async getInjuries(orgId: string, params?: { status?: string; severity?: string; athleteId?: string }) {
     const response = await this.client.get('/injuries', { params: { orgId, ...params } })
@@ -259,6 +342,46 @@ class ApiService {
 
   async deleteInjury(id: string, orgId: string) {
     const response = await this.client.delete(`/injuries/${id}`, { params: { orgId } })
+    return response.data
+  }
+
+  // Injury medical workflow: RTP, diagnoses, notes, clearance
+  async getInjuryCase(id: string, orgId: string) {
+    const response = await this.client.get(`/injuries/${id}/case`, { params: { orgId } })
+    return response.data
+  }
+
+  async startRtp(id: string, orgId: string) {
+    const response = await this.client.post(`/injuries/${id}/rtp/start`, {}, { params: { orgId } })
+    return response.data
+  }
+
+  async advanceRtp(id: string, orgId: string, body: { notes?: string } = {}) {
+    const response = await this.client.post(`/injuries/${id}/rtp/advance`, body, { params: { orgId } })
+    return response.data
+  }
+
+  async updateRtpStage(id: string, orgId: string, body: { criteria?: any[]; notes?: string }) {
+    const response = await this.client.patch(`/injuries/${id}/rtp/stage`, body, { params: { orgId } })
+    return response.data
+  }
+
+  async addDiagnosis(id: string, orgId: string, body: { icd10Code?: string; description: string }) {
+    const response = await this.client.post(`/injuries/${id}/diagnoses`, body, { params: { orgId } })
+    return response.data
+  }
+
+  async addTreatmentNote(id: string, orgId: string, body: { note: string; medicalHold?: boolean }) {
+    const response = await this.client.post(`/injuries/${id}/notes`, body, { params: { orgId } })
+    return response.data
+  }
+
+  async addClearance(
+    id: string,
+    orgId: string,
+    body: { status: string; expiresAt?: string; followUpDate?: string; notes?: string },
+  ) {
+    const response = await this.client.post(`/injuries/${id}/clearances`, body, { params: { orgId } })
     return response.data
   }
 

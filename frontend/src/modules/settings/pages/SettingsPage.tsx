@@ -211,7 +211,101 @@ export default function SettingsPage() {
           {saved && <span className="text-sm text-fiim-emerald">Configuration updated</span>}
         </div>
       )}
+
+      <NotificationPreferences />
     </div>
+  )
+}
+
+interface NotifPrefs {
+  inApp: boolean
+  email: boolean
+  sms: boolean
+  push: boolean
+  quietHoursStart: number | null
+  quietHoursEnd: number | null
+}
+
+const NOTIF_DEFAULTS: NotifPrefs = {
+  inApp: true,
+  email: true,
+  sms: false,
+  push: false,
+  quietHoursStart: null,
+  quietHoursEnd: null,
+}
+
+function NotificationPreferences() {
+  const { user } = useAuthStore()
+  const [prefs, setPrefs] = useState<NotifPrefs>(NOTIF_DEFAULTS)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (!user?.orgId) return
+    apiService
+      .getNotificationPreferences(user.orgId)
+      .then((data) => setPrefs({ ...NOTIF_DEFAULTS, ...data }))
+      .catch(() => undefined)
+      .finally(() => setLoading(false))
+  }, [user?.orgId])
+
+  const toggle = (key: keyof NotifPrefs) => {
+    setPrefs((p) => ({ ...p, [key]: !p[key] }))
+    setSaved(false)
+  }
+
+  const save = async () => {
+    if (!user?.orgId) return
+    setSaving(true)
+    try {
+      await apiService.updateNotificationPreferences(user.orgId, prefs)
+      setSaved(true)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return null
+
+  const channels: { key: keyof NotifPrefs; label: string }[] = [
+    { key: 'inApp', label: 'In-app' },
+    { key: 'email', label: 'Email' },
+    { key: 'sms', label: 'SMS' },
+    { key: 'push', label: 'Push' },
+  ]
+
+  return (
+    <section className="rounded-xl bg-white p-6 shadow-sm">
+      <h3 className="mb-1 text-lg font-semibold text-fiim-slate">Notification Preferences</h3>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Choose how you receive alerts. Critical alerts always break through quiet hours.
+      </p>
+      <div className="space-y-3">
+        {channels.map((c) => (
+          <label key={c.key} className="flex cursor-pointer items-center justify-between">
+            <span className="text-sm text-fiim-slate">{c.label}</span>
+            <input
+              type="checkbox"
+              checked={!!prefs[c.key]}
+              onChange={() => toggle(c.key)}
+              className="h-4 w-4 rounded border-input"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-lg bg-fiim-sky px-5 py-2.5 text-sm font-medium text-white transition hover:bg-fiim-sky/90 disabled:opacity-60"
+        >
+          {saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+          {saving ? 'Saving…' : saved ? 'Saved' : 'Save preferences'}
+        </button>
+      </div>
+    </section>
   )
 }
 

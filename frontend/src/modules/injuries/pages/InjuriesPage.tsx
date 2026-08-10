@@ -36,6 +36,7 @@ export default function InjuriesPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('OPEN')
   const [showForm, setShowForm] = useState(false)
+  const [openCaseId, setOpenCaseId] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -155,15 +156,23 @@ export default function InjuriesPage() {
                       : ''}
                   </p>
                 </div>
-                {injury.status !== 'RESOLVED' && (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => advanceStatus(injury)}
+                    onClick={() => setOpenCaseId(injury.id)}
                     className="inline-flex items-center gap-1 rounded-md border border-input px-3 py-1.5 text-xs font-medium text-fiim-slate hover:bg-fiim-coolgray/50"
                   >
-                    {statusLabel(STATUS_FLOW[STATUS_FLOW.indexOf(injury.status) + 1])}
-                    <ArrowRight className="h-3 w-3" />
+                    View case
                   </button>
-                )}
+                  {injury.status !== 'RESOLVED' && (
+                    <button
+                      onClick={() => advanceStatus(injury)}
+                      className="inline-flex items-center gap-1 rounded-md border border-input px-3 py-1.5 text-xs font-medium text-fiim-slate hover:bg-fiim-coolgray/50"
+                    >
+                      {statusLabel(STATUS_FLOW[STATUS_FLOW.indexOf(injury.status) + 1])}
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           )}
@@ -180,6 +189,316 @@ export default function InjuriesPage() {
           }}
         />
       )}
+
+      {openCaseId && (
+        <InjuryCaseDrawer
+          injuryId={openCaseId}
+          onClose={() => setOpenCaseId(null)}
+          onChanged={loadData}
+        />
+      )}
+    </div>
+  )
+}
+
+const RTP_STAGES = [
+  'REST',
+  'RECOVERY',
+  'RECONDITIONING',
+  'RETURN_TO_TRAINING',
+  'RETURN_TO_PLAY',
+] as const
+
+function rtpLabel(stage: string) {
+  return stage
+    .split('_')
+    .map((w) => w[0] + w.slice(1).toLowerCase())
+    .join(' ')
+}
+
+function InjuryCaseDrawer({
+  injuryId,
+  onClose,
+  onChanged,
+}: {
+  injuryId: string
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const { user } = useAuthStore()
+  const [caseData, setCaseData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async () => {
+    if (!user?.orgId) return
+    setLoading(true)
+    try {
+      setCaseData(await apiService.getInjuryCase(injuryId, user.orgId))
+    } catch {
+      setError('Failed to load case.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+  }, [injuryId, user?.orgId])
+
+  const action = async (fn: () => Promise<any>) => {
+    if (!user?.orgId) return
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+      await load()
+      onChanged()
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Action failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const currentIdx = caseData?.currentRtpStage
+    ? RTP_STAGES.indexOf(caseData.currentRtpStage)
+    : -1
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
+      <div
+        className="h-full w-full max-w-lg overflow-y-auto bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-fiim-slate">Injury case</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-fiim-slate">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex h-40 items-center justify-center">
+            <LoadingSpinner />
+          </div>
+        ) : !caseData ? (
+          <p className="text-sm text-muted-foreground">{error ?? 'No data.'}</p>
+        ) : (
+          <div className="space-y-6">
+            {error && (
+              <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+            )}
+
+            {/* Summary */}
+            <div>
+              <p className="font-medium text-fiim-slate">
+                {caseData.athlete?.firstName} {caseData.athlete?.lastName}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {caseData.bodyPart} • {statusLabel(caseData.status)} •{' '}
+                {caseData.severity?.toLowerCase()}
+                {caseData.medicalHold ? ' • ⛔ Medical hold' : ''}
+              </p>
+            </div>
+
+            {/* RTP stepper */}
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="font-semibold text-fiim-slate">Return-to-play</h4>
+                {currentIdx === -1 ? (
+                  <button
+                    disabled={busy}
+                    onClick={() => action(() => apiService.startRtp(injuryId, user!.orgId!))}
+                    className="rounded-md bg-fiim-sky px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  >
+                    Start pathway
+                  </button>
+                ) : (
+                  caseData.currentRtpStage !== 'RETURN_TO_PLAY' && (
+                    <button
+                      disabled={busy}
+                      onClick={() => action(() => apiService.advanceRtp(injuryId, user!.orgId!))}
+                      className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-fiim-slate hover:bg-fiim-coolgray/50 disabled:opacity-50"
+                    >
+                      Advance stage
+                    </button>
+                  )
+                )}
+              </div>
+              <ol className="space-y-2">
+                {RTP_STAGES.map((stage, i) => {
+                  const done = currentIdx > i
+                  const active = currentIdx === i
+                  return (
+                    <li key={stage} className="flex items-center gap-3">
+                      <span
+                        className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                          done
+                            ? 'bg-fiim-emerald text-white'
+                            : active
+                              ? 'bg-fiim-sky text-white'
+                              : 'bg-fiim-coolgray/50 text-muted-foreground'
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                      <span
+                        className={`text-sm ${active ? 'font-semibold text-fiim-slate' : 'text-muted-foreground'}`}
+                      >
+                        {rtpLabel(stage)}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+
+            {caseData.clinicalAccess ? (
+              <ClinicalPanels injuryId={injuryId} caseData={caseData} onAction={action} busy={busy} />
+            ) : (
+              <p className="rounded-md bg-fiim-coolgray/30 px-3 py-2 text-xs text-muted-foreground">
+                Clinical details (diagnoses, treatment notes, clearances) are visible to medical
+                staff only.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ClinicalPanels({
+  injuryId,
+  caseData,
+  onAction,
+  busy,
+}: {
+  injuryId: string
+  caseData: any
+  onAction: (fn: () => Promise<any>) => Promise<void>
+  busy: boolean
+}) {
+  const { user } = useAuthStore()
+  const [dx, setDx] = useState('')
+  const [icd, setIcd] = useState('')
+  const [note, setNote] = useState('')
+
+  return (
+    <div className="space-y-6 border-t pt-4">
+      {/* Diagnoses */}
+      <section>
+        <h4 className="mb-2 font-semibold text-fiim-slate">Diagnoses</h4>
+        <ul className="mb-2 space-y-1 text-sm">
+          {(caseData.diagnoses ?? []).length === 0 ? (
+            <li className="text-muted-foreground">None recorded.</li>
+          ) : (
+            caseData.diagnoses.map((d: any) => (
+              <li key={d.id} className="text-fiim-slate">
+                {d.icd10Code ? <span className="font-mono text-xs">{d.icd10Code} · </span> : null}
+                {d.description}
+              </li>
+            ))
+          )}
+        </ul>
+        <div className="flex gap-2">
+          <input
+            value={icd}
+            onChange={(e) => setIcd(e.target.value)}
+            placeholder="ICD-10"
+            className="w-24 rounded-md border border-input px-2 py-1 text-sm"
+          />
+          <input
+            value={dx}
+            onChange={(e) => setDx(e.target.value)}
+            placeholder="Diagnosis"
+            className="flex-1 rounded-md border border-input px-2 py-1 text-sm"
+          />
+          <button
+            disabled={busy || !dx}
+            onClick={() =>
+              onAction(() =>
+                apiService.addDiagnosis(injuryId, user!.orgId!, {
+                  description: dx,
+                  icd10Code: icd || undefined,
+                }),
+              ).then(() => {
+                setDx('')
+                setIcd('')
+              })
+            }
+            className="rounded-md bg-fiim-sky px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      </section>
+
+      {/* Treatment notes */}
+      <section>
+        <h4 className="mb-2 font-semibold text-fiim-slate">Treatment notes</h4>
+        <ul className="mb-2 space-y-1 text-sm">
+          {(caseData.treatmentNotes ?? []).length === 0 ? (
+            <li className="text-muted-foreground">None recorded.</li>
+          ) : (
+            caseData.treatmentNotes.map((n: any) => (
+              <li key={n.id} className="text-fiim-slate">
+                {n.medicalHold ? '⛔ ' : ''}
+                {n.note}
+              </li>
+            ))
+          )}
+        </ul>
+        <div className="flex gap-2">
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="New note"
+            className="flex-1 rounded-md border border-input px-2 py-1 text-sm"
+          />
+          <button
+            disabled={busy || !note}
+            onClick={() =>
+              onAction(() =>
+                apiService.addTreatmentNote(injuryId, user!.orgId!, { note }),
+              ).then(() => setNote(''))
+            }
+            className="rounded-md bg-fiim-sky px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      </section>
+
+      {/* Clearances */}
+      <section>
+        <h4 className="mb-2 font-semibold text-fiim-slate">Medical clearances</h4>
+        <ul className="mb-2 space-y-1 text-sm">
+          {(caseData.clearances ?? []).length === 0 ? (
+            <li className="text-muted-foreground">None recorded.</li>
+          ) : (
+            caseData.clearances.map((c: any) => (
+              <li key={c.id} className="text-fiim-slate">
+                {c.status}
+                {c.expiresAt ? ` · expires ${new Date(c.expiresAt).toLocaleDateString()}` : ''}
+              </li>
+            ))
+          )}
+        </ul>
+        <button
+          disabled={busy}
+          onClick={() =>
+            onAction(() =>
+              apiService.addClearance(injuryId, user!.orgId!, { status: 'CLEARED' }),
+            )
+          }
+          className="rounded-md border border-input px-3 py-1 text-xs font-medium text-fiim-slate hover:bg-fiim-coolgray/50 disabled:opacity-50"
+        >
+          Record clearance (CLEARED)
+        </button>
+      </section>
     </div>
   )
 }

@@ -5,7 +5,12 @@ vi.mock('../../../stores/auth.store', () => ({
   useAuthStore: () => ({ user: { orgId: 'org', role: 'ORGANIZATION_ADMIN' } }),
 }))
 vi.mock('../../../services/api.service', () => ({
-  default: { getAlgorithmConfig: vi.fn(), updateAlgorithmConfig: vi.fn() },
+  default: {
+    getAlgorithmConfig: vi.fn(),
+    updateAlgorithmConfig: vi.fn(),
+    getNotificationPreferences: vi.fn(),
+    updateNotificationPreferences: vi.fn(),
+  },
 }))
 
 import apiService from '../../../services/api.service'
@@ -27,6 +32,15 @@ beforeEach(() => {
   vi.clearAllMocks()
   ;(apiService.getAlgorithmConfig as any).mockResolvedValue(config)
   ;(apiService.updateAlgorithmConfig as any).mockResolvedValue(config)
+  ;(apiService.getNotificationPreferences as any).mockResolvedValue({
+    inApp: true,
+    email: true,
+    sms: false,
+    push: false,
+    quietHoursStart: null,
+    quietHoursEnd: null,
+  })
+  ;(apiService.updateNotificationPreferences as any).mockResolvedValue({})
 })
 
 describe('SettingsPage', () => {

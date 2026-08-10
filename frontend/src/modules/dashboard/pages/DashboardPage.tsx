@@ -3,13 +3,18 @@ import { Link } from 'react-router-dom'
 import { useAuthStore } from '../../../stores/auth.store'
 import apiService from '../../../services/api.service'
 import { LoadingSpinner } from '../../../components/LoadingSpinner'
+import { PageHeader } from '../../../components/ui/PageHeader'
+import { StatCard } from '../../../components/ui/StatCard'
+import { Card } from '../../../components/ui/Card'
+import { Button } from '../../../components/ui/Button'
+import { Badge } from '../../../components/ui/Badge'
 import {
   Users,
   Activity,
   AlertTriangle,
   TrendingUp,
+  TrendingDown,
   Shield,
-  ArrowRight,
   Heart,
   BarChart3,
   Plus,
@@ -31,6 +36,15 @@ import {
   Cell,
 } from 'recharts'
 
+const CHART_TOOLTIP_STYLE = {
+  borderRadius: '10px',
+  border: '1px solid hsl(var(--border))',
+  background: 'hsl(var(--popover))',
+  color: 'hsl(var(--popover-foreground))',
+  boxShadow: 'var(--shadow-md)',
+  fontSize: '12px',
+}
+
 export default function DashboardPage() {
   const { user } = useAuthStore()
   const [stats, setStats] = useState<any>(null)
@@ -49,18 +63,18 @@ export default function DashboardPage() {
 
   const loadDashboard = async () => {
     if (!user?.orgId) return
-    
+
     setLoading(true)
     try {
       const [statsData, acwr, wellness, risk, teams, athletesData] = await Promise.all([
-        apiService.client.get('/dashboard/overview', { params: { orgId: user.orgId } }).then(r => r.data),
-        apiService.client.get('/dashboard/acwr-summary', { params: { orgId: user.orgId } }).then(r => r.data),
-        apiService.client.get('/dashboard/wellness-trend', { params: { orgId: user.orgId } }).then(r => r.data),
-        apiService.client.get('/dashboard/injury-risk', { params: { orgId: user.orgId } }).then(r => r.data),
-        apiService.client.get('/dashboard/team-overview', { params: { orgId: user.orgId } }).then(r => r.data),
+        apiService.client.get('/dashboard/overview', { params: { orgId: user.orgId } }).then((r) => r.data),
+        apiService.client.get('/dashboard/acwr-summary', { params: { orgId: user.orgId } }).then((r) => r.data),
+        apiService.client.get('/dashboard/wellness-trend', { params: { orgId: user.orgId } }).then((r) => r.data),
+        apiService.client.get('/dashboard/injury-risk', { params: { orgId: user.orgId } }).then((r) => r.data),
+        apiService.client.get('/dashboard/team-overview', { params: { orgId: user.orgId } }).then((r) => r.data),
         apiService.getAthletes(user.orgId),
       ])
-      
+
       setStats(statsData)
       setAcwrData(acwr)
       setWellnessTrend(wellness)
@@ -75,49 +89,25 @@ export default function DashboardPage() {
   }
 
   const statCards = [
-    {
-      name: 'Total Athletes',
-      value: stats?.athletes?.total || 0,
-      icon: Users,
-      color: 'bg-fiim-sky',
-      href: '/athletes',
-    },
-    {
-      name: 'Active',
-      value: stats?.athletes?.active || 0,
-      icon: Activity,
-      color: 'bg-fiim-emerald',
-      href: '/athletes?status=ACTIVE',
-    },
-    {
-      name: 'Injured',
-      value: stats?.athletes?.injured || 0,
-      icon: AlertTriangle,
-      color: 'bg-red-500',
-      href: '/athletes?status=INJURED',
-    },
-    {
-      name: 'At Risk',
-      value: injuryRisk?.totalAtRisk || 0,
-      icon: Shield,
-      color: 'bg-fiim-amber',
-      href: '/alerts',
-    },
+    { name: 'Total Athletes', value: stats?.athletes?.total || 0, icon: Users, tone: 'primary' as const, href: '/athletes' },
+    { name: 'Active', value: stats?.athletes?.active || 0, icon: Activity, tone: 'success' as const, href: '/athletes?status=ACTIVE' },
+    { name: 'Injured', value: stats?.athletes?.injured || 0, icon: AlertTriangle, tone: 'danger' as const, href: '/athletes?status=INJURED' },
+    { name: 'At Risk', value: injuryRisk?.totalAtRisk || 0, icon: Shield, tone: 'warning' as const, href: '/alerts' },
   ]
 
-  const RISK_COLORS = {
-    LOW: '#059669',
-    MODERATE: '#d97706',
-    HIGH: '#dc2626',
-    VERY_HIGH: '#7f1d1d',
-  }
+  const RISK_COLORS = { LOW: '#059669', MODERATE: '#d97706', HIGH: '#dc2626', VERY_HIGH: '#7f1d1d' }
 
-  const pieData = injuryRisk?.distribution ? [
-    { name: 'Low Risk', value: injuryRisk.distribution.LOW, color: RISK_COLORS.LOW },
-    { name: 'Moderate', value: injuryRisk.distribution.MODERATE, color: RISK_COLORS.MODERATE },
-    { name: 'High Risk', value: injuryRisk.distribution.HIGH, color: RISK_COLORS.HIGH },
-    { name: 'Very High', value: injuryRisk.distribution.VERY_HIGH, color: RISK_COLORS.VERY_HIGH },
-  ].filter(d => d.value > 0) : []
+  const pieData = injuryRisk?.distribution
+    ? [
+        { name: 'Low Risk', value: injuryRisk.distribution.LOW, color: RISK_COLORS.LOW },
+        { name: 'Moderate', value: injuryRisk.distribution.MODERATE, color: RISK_COLORS.MODERATE },
+        { name: 'High Risk', value: injuryRisk.distribution.HIGH, color: RISK_COLORS.HIGH },
+        { name: 'Very High', value: injuryRisk.distribution.VERY_HIGH, color: RISK_COLORS.VERY_HIGH },
+      ].filter((d) => d.value > 0)
+    : []
+
+  const riskBadgeVariant = (level: string) =>
+    level === 'VERY_HIGH' || level === 'HIGH' ? 'danger' : level === 'MODERATE' ? 'warning' : 'success'
 
   if (loading) {
     return (
@@ -127,105 +117,64 @@ export default function DashboardPage() {
     )
   }
 
+  const highRisk = acwrData.filter((a: any) => a.riskLevel === 'HIGH' || a.riskLevel === 'VERY_HIGH')
+
   return (
-    <div className="space-y-8">
-      {/* Welcome */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-fiim-slate">
-            Dashboard
-          </h2>
-          <p className="text-muted-foreground">
-            Overview of your athletes, training load, and injury risks
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowTrainingModal(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-fiim-sky px-4 py-2 text-sm font-medium text-white hover:bg-fiim-sky/90"
-          >
-            <Plus className="h-4 w-4" />
-            Training Session
-          </button>
-          <button
-            onClick={() => setShowWellnessModal(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-fiim-emerald px-4 py-2 text-sm font-medium text-white hover:bg-fiim-emerald/90"
-          >
-            <Plus className="h-4 w-4" />
-            Wellness Entry
-          </button>
-          <div className="flex items-center gap-2 rounded-lg bg-fiim-sky/10 px-3 py-1.5 text-sm text-fiim-sky">
-            <Heart className="h-4 w-4" />
-            <span>{stats?.athletes?.healthy || 0} Healthy Athletes</span>
-          </div>
-        </div>
-      </div>
-
-      <WellnessQuickEntry
-        isOpen={showWellnessModal}
-        onClose={() => setShowWellnessModal(false)}
-        athletes={athletes}
+    <div className="space-y-6">
+      <PageHeader
+        title="Dashboard"
+        description="Overview of your athletes, training load, and injury risks"
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setShowTrainingModal(true)}>
+              <Plus /> Training Session
+            </Button>
+            <Button variant="success" size="sm" onClick={() => setShowWellnessModal(true)}>
+              <Plus /> Wellness Entry
+            </Button>
+            <Badge variant="primary" className="hidden px-3 py-1.5 sm:inline-flex">
+              <Heart className="h-3.5 w-3.5" aria-hidden="true" />
+              {stats?.athletes?.healthy || 0} Healthy
+            </Badge>
+          </>
+        }
       />
 
-      <TrainingSessionQuickEntry
-        isOpen={showTrainingModal}
-        onClose={() => setShowTrainingModal(false)}
-        athletes={athletes}
-      />
+      <WellnessQuickEntry isOpen={showWellnessModal} onClose={() => setShowWellnessModal(false)} athletes={athletes} />
+      <TrainingSessionQuickEntry isOpen={showTrainingModal} onClose={() => setShowTrainingModal(false)} athletes={athletes} />
 
-      {/* Stats Grid */}
+      {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat) => (
-          <Link
-            key={stat.name}
-            to={stat.href}
-            className="group rounded-xl bg-white p-6 shadow-sm hover:shadow-md transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <div className={`rounded-lg ${stat.color} p-3 text-white`}>
-                <stat.icon className="h-5 w-5" />
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <p className="mt-4 text-2xl font-bold text-fiim-slate">{stat.value}</p>
-            <p className="text-sm text-muted-foreground">{stat.name}</p>
-          </Link>
+          <StatCard key={stat.name} label={stat.name} value={stat.value} icon={stat.icon} tone={stat.tone} href={stat.href} />
         ))}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* ACWR Bar Chart */}
-        <div className="lg:col-span-2 rounded-xl bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+      {/* Charts row */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* ACWR */}
+        <Card className="p-5 sm:p-6 lg:col-span-2">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-lg font-semibold text-fiim-slate">ACWR Summary</h3>
-              <p className="text-sm text-muted-foreground">Acute:Chronic Workload Ratio by Athlete</p>
+              <h3 className="text-base font-semibold text-foreground">ACWR Summary</h3>
+              <p className="text-sm text-muted-foreground">Acute:Chronic Workload Ratio by athlete</p>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-fiim-emerald"></span> Safe</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-fiim-amber"></span> Caution</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500"></span> Danger</span>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success" /> Safe</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-warning" /> Caution</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive" /> Danger</span>
             </div>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={acwrData.slice(0, 8)} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="name" 
-                  tick={{ fontSize: 11 }} 
-                  angle={-45} 
-                  textAnchor="end" 
-                  height={60}
-                />
-                <YAxis tick={{ fontSize: 11 }} domain={[0, 2]} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: any, _name: any, props: any) => [
-                    `ACWR: ${value}`,
-                    `${props.payload.position}`,
-                  ]}
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} angle={-45} textAnchor="end" height={60} stroke="hsl(var(--border))" />
+                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} domain={[0, 2]} stroke="hsl(var(--border))" />
+                <Tooltip
+                  cursor={{ fill: 'hsl(var(--muted))' }}
+                  contentStyle={CHART_TOOLTIP_STYLE}
+                  formatter={(value: any, _name: any, props: any) => [`ACWR: ${value}`, `${props.payload.position}`]}
                 />
                 <Bar dataKey="acwr" radius={[4, 4, 0, 0]}>
                   {acwrData.slice(0, 8).map((entry, index) => (
@@ -235,186 +184,138 @@ export default function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
-        {/* Injury Risk Pie Chart */}
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-fiim-slate mb-1">Injury Risk</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {injuryRisk?.percentageAtRisk || 0}% at elevated risk
-          </p>
-          <div className="h-48">
+        {/* Injury risk pie */}
+        <Card className="p-5 sm:p-6">
+          <h3 className="text-base font-semibold text-foreground">Injury Risk</h3>
+          <p className="mb-4 text-sm text-muted-foreground">{injuryRisk?.percentageAtRisk || 0}% at elevated risk</p>
+          <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={48} outerRadius={76} paddingAngle={2} dataKey="value">
                   {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell key={`cell-${index}`} fill={entry.color} stroke="hsl(var(--card))" strokeWidth={2} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-2 space-y-1.5">
+          <div className="mt-3 space-y-1.5">
             {pieData.map((item) => (
               <div key={item.name} className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }}></span>
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                   {item.name}
                 </span>
-                <span className="font-medium text-fiim-slate">{item.value}</span>
+                <span className="font-medium tabular-nums text-foreground">{item.value}</span>
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
 
-      {/* Wellness Trend & Team Overview */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Wellness Trend */}
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+      {/* Wellness trend + team overview */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-fiim-slate">Wellness Trend</h3>
-              <p className="text-sm text-muted-foreground">Daily average wellness scores (last 7 days)</p>
+              <h3 className="text-base font-semibold text-foreground">Wellness Trend</h3>
+              <p className="text-sm text-muted-foreground">Daily average wellness (last 7 days)</p>
             </div>
-            <div className="rounded-lg bg-fiim-emerald/10 p-2 text-fiim-emerald">
-              <TrendingUp className="h-5 w-5" />
-            </div>
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success">
+              <TrendingUp className="h-5 w-5" aria-hidden="true" />
+            </span>
           </div>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={wellnessTrend} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { weekday: 'short' })}
-                />
-                <YAxis tick={{ fontSize: 11 }} domain={[0, 10]} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: any) => [`Score: ${Number(value).toFixed(1)}`, '']}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="avgScore" 
-                  stroke="#0284c7" 
-                  strokeWidth={2}
-                  dot={{ fill: '#0284c7', r: 3 }}
-                  activeDot={{ r: 5 }}
-                />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" tickFormatter={(v) => new Date(v).toLocaleDateString('en-US', { weekday: 'short' })} />
+                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} domain={[0, 10]} stroke="hsl(var(--border))" />
+                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(value: any) => [`Score: ${Number(value).toFixed(1)}`, '']} />
+                <Line type="monotone" dataKey="avgScore" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ fill: 'hsl(var(--primary))', r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
-        {/* Team Overview */}
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-fiim-slate">Team Overview</h3>
+              <h3 className="text-base font-semibold text-foreground">Team Overview</h3>
               <p className="text-sm text-muted-foreground">Active roster by team</p>
             </div>
-            <div className="rounded-lg bg-fiim-sky/10 p-2 text-fiim-sky">
-              <BarChart3 className="h-5 w-5" />
-            </div>
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <BarChart3 className="h-5 w-5" aria-hidden="true" />
+            </span>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {teamOverview.map((team: any) => (
-              <div key={team.id} className="rounded-lg border border-fiim-coolgray p-4">
-                <div className="flex items-center justify-between mb-2">
+              <div key={team.id} className="rounded-lg border border-border p-4">
+                <div className="mb-2 flex items-center justify-between">
                   <div>
-                    <h4 className="font-medium text-fiim-slate">{team.name}</h4>
+                    <h4 className="font-medium text-foreground">{team.name}</h4>
                     <p className="text-xs text-muted-foreground">{team.sport?.name} • {team.category}</p>
                   </div>
-                  <span className="rounded-full bg-fiim-coolgray px-2.5 py-1 text-xs font-medium text-fiim-slate">
-                    {team.activeMembers}/{team.totalMembers} Active
-                  </span>
+                  <Badge>{team.activeMembers}/{team.totalMembers} Active</Badge>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2 w-2 rounded-full bg-fiim-emerald"></div>
-                    <span className="text-muted-foreground">{team.activeMembers} Healthy</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2 w-2 rounded-full bg-red-500"></div>
-                    <span className="text-muted-foreground">{team.injuredMembers} Injured</span>
-                  </div>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success" /> {team.activeMembers} Healthy</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive" /> {team.injuredMembers} Injured</span>
                 </div>
               </div>
             ))}
+            {teamOverview.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No teams yet.</p>}
           </div>
-        </div>
+        </Card>
       </div>
 
-      {/* High Risk Athletes Table */}
-      <div className="rounded-xl bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
+      {/* At-risk table */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border p-5 sm:p-6">
           <div>
-            <h3 className="text-lg font-semibold text-fiim-slate">Athletes at Risk</h3>
-            <p className="text-sm text-muted-foreground">Athletes with elevated ACWR requiring attention</p>
+            <h3 className="text-base font-semibold text-foreground">Athletes at Risk</h3>
+            <p className="text-sm text-muted-foreground">Elevated ACWR requiring attention</p>
           </div>
-          <Link to="/athletes" className="text-sm font-medium text-fiim-sky hover:underline">
-            View all athletes
-          </Link>
+          <Link to="/athletes" className="text-sm font-medium text-primary hover:underline">View all</Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b bg-fiim-coolgray/50">
-              <tr>
-                <th className="px-4 py-3 font-medium text-fiim-slate">Athlete</th>
-                <th className="px-4 py-3 font-medium text-fiim-slate">Position</th>
-                <th className="px-4 py-3 font-medium text-fiim-slate">ACWR</th>
-                <th className="px-4 py-3 font-medium text-fiim-slate">Acute Load</th>
-                <th className="px-4 py-3 font-medium text-fiim-slate">Chronic Load</th>
-                <th className="px-4 py-3 font-medium text-fiim-slate">Risk Level</th>
-                <th className="px-4 py-3 font-medium text-fiim-slate">Trend</th>
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                <th scope="col" className="px-5 py-3 font-medium">Athlete</th>
+                <th scope="col" className="px-5 py-3 font-medium">Position</th>
+                <th scope="col" className="px-5 py-3 font-medium">ACWR</th>
+                <th scope="col" className="px-5 py-3 font-medium">Acute</th>
+                <th scope="col" className="px-5 py-3 font-medium">Chronic</th>
+                <th scope="col" className="px-5 py-3 font-medium">Risk</th>
+                <th scope="col" className="px-5 py-3 font-medium">Trend</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {acwrData
-                .filter((a: any) => a.riskLevel === 'HIGH' || a.riskLevel === 'VERY_HIGH')
-                .slice(0, 5)
-                .map((athlete: any) => (
-                <tr key={athlete.athleteId} className="hover:bg-fiim-coolgray/30 transition-colors">
-                  <td className="px-4 py-3 font-medium text-fiim-slate">{athlete.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{athlete.position || '—'}</td>
-                  <td className="px-4 py-3 font-medium" style={{ color: athlete.riskColor }}>
-                    {athlete.acwr}
+            <tbody className="divide-y divide-border">
+              {highRisk.slice(0, 5).map((athlete: any) => (
+                <tr key={athlete.athleteId} className="transition-colors hover:bg-muted/40">
+                  <td className="px-5 py-3 font-medium text-foreground">{athlete.name}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{athlete.position || '—'}</td>
+                  <td className="px-5 py-3 font-semibold tabular-nums" style={{ color: athlete.riskColor }}>{athlete.acwr}</td>
+                  <td className="px-5 py-3 tabular-nums text-muted-foreground">{athlete.acuteLoad}</td>
+                  <td className="px-5 py-3 tabular-nums text-muted-foreground">{athlete.chronicLoad}</td>
+                  <td className="px-5 py-3">
+                    <Badge variant={riskBadgeVariant(athlete.riskLevel)}>{athlete.riskLevel.replace('_', ' ')}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{athlete.acuteLoad}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{athlete.chronicLoad}</td>
-                  <td className="px-4 py-3">
-                    <span 
-                      className="rounded-full px-2.5 py-1 text-xs font-medium"
-                      style={{ 
-                        backgroundColor: athlete.riskColor + '20',
-                        color: athlete.riskColor 
-                      }}
-                    >
-                      {athlete.riskLevel.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`flex items-center gap-1 text-xs ${athlete.trend === 'increasing' ? 'text-red-500' : 'text-fiim-emerald'}`}>
-                      <TrendingUp className={`h-3 w-3 ${athlete.trend === 'increasing' ? 'rotate-0' : ''}`} />
+                  <td className="px-5 py-3">
+                    <span className={`flex items-center gap-1 text-xs font-medium ${athlete.trend === 'increasing' ? 'text-destructive' : 'text-success'}`}>
+                      {athlete.trend === 'increasing' ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
                       {athlete.trend}
                     </span>
                   </td>
                 </tr>
               ))}
-              {acwrData.filter((a: any) => a.riskLevel === 'HIGH' || a.riskLevel === 'VERY_HIGH').length === 0 && (
+              {highRisk.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
                     No athletes currently at elevated risk. Great job!
                   </td>
                 </tr>
@@ -422,7 +323,7 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   )
 }

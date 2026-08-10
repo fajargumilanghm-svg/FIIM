@@ -43,17 +43,29 @@ interface Session {
   athleteLoads: AthleteLoad[]
 }
 
+interface MonotonyRow {
+  athleteId: string
+  name: string
+  position?: string | null
+  weeklyLoad: number | null
+  monotony: number | null
+  strain: number | null
+  monotonyRisk: string | null
+}
+
 export default function TrainingLoadPage() {
   const { user } = useAuthStore()
   const [sessions, setSessions] = useState<Session[]>([])
   const [athletes, setAthletes] = useState<any[]>([])
   const [selectedAthlete, setSelectedAthlete] = useState<string>('')
   const [loadHistory, setLoadHistory] = useState<any[]>([])
+  const [monotony, setMonotony] = useState<MonotonyRow[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedSession, setExpandedSession] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
+    loadMonotony()
   }, [user?.orgId])
 
   useEffect(() => {
@@ -77,6 +89,27 @@ export default function TrainingLoadPage() {
       console.error('Training load error:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMonotony = async () => {
+    if (!user?.orgId) return
+    try {
+      const summary = await apiService.getCalcTeamSummary(user.orgId)
+      const rows: MonotonyRow[] = (summary?.athletes ?? [])
+        .filter((a: any) => a.monotony != null || a.weeklyLoad != null)
+        .map((a: any) => ({
+          athleteId: a.athleteId,
+          name: a.name,
+          position: a.position,
+          weeklyLoad: a.weeklyLoad ?? null,
+          monotony: a.monotony ?? null,
+          strain: a.strain ?? null,
+          monotonyRisk: a.monotonyRisk ?? null,
+        }))
+      setMonotony(rows)
+    } catch (error) {
+      console.error('Monotony summary error:', error)
     }
   }
 
@@ -199,6 +232,53 @@ export default function TrainingLoadPage() {
         </div>
       </div>
 
+      {/* Monotony & Strain (Foster, 1998) */}
+      <div className="rounded-xl bg-white p-6 shadow-sm">
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-fiim-slate">Monotony &amp; Strain (7-day)</h3>
+          <span className="text-xs text-muted-foreground">
+            Monotony = mean ÷ SD of daily load · Strain = weekly load × monotony
+          </span>
+        </div>
+        {monotony.length === 0 ? (
+          <div className="flex h-24 items-center justify-center text-muted-foreground">
+            No monotony data yet — log at least a week of sessions.
+          </div>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground">
+                  <th className="pb-2 font-medium">Athlete</th>
+                  <th className="pb-2 font-medium">Weekly Load</th>
+                  <th className="pb-2 font-medium">Monotony</th>
+                  <th className="pb-2 font-medium">Strain</th>
+                  <th className="pb-2 font-medium">Risk</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {monotony.map((m) => (
+                  <tr key={m.athleteId}>
+                    <td className="py-2 text-fiim-slate">
+                      {m.name}
+                      {m.position ? (
+                        <span className="ml-1 text-xs text-muted-foreground">· {m.position}</span>
+                      ) : null}
+                    </td>
+                    <td className="py-2">{m.weeklyLoad?.toLocaleString() ?? '—'}</td>
+                    <td className="py-2 font-medium text-fiim-slate">{m.monotony ?? '—'}</td>
+                    <td className="py-2">{m.strain?.toLocaleString() ?? '—'}</td>
+                    <td className="py-2">
+                      <MonotonyBadge risk={m.monotonyRisk} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Sessions Table */}
       <div className="rounded-xl bg-white shadow-sm">
         <div className="border-b p-6">
@@ -291,6 +371,20 @@ export default function TrainingLoadPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function MonotonyBadge({ risk }: { risk: string | null }) {
+  if (!risk) return <span className="text-muted-foreground">—</span>
+  const styles: Record<string, string> = {
+    NORMAL: 'bg-fiim-emerald/10 text-fiim-emerald',
+    ELEVATED: 'bg-fiim-amber/10 text-fiim-amber',
+    HIGH: 'bg-red-500/10 text-red-600',
+  }
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${styles[risk] ?? 'bg-muted'}`}>
+      {risk}
+    </span>
   )
 }
 

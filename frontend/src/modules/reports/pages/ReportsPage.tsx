@@ -2,7 +2,56 @@ import { useState, useEffect } from 'react'
 import { useAuthStore } from '../../../stores/auth.store'
 import apiService from '../../../services/api.service'
 import { LoadingSpinner } from '../../../components/LoadingSpinner'
-import { Download, Users, ShieldAlert, HeartPulse, Activity } from 'lucide-react'
+import {
+  Download,
+  Users,
+  ShieldAlert,
+  HeartPulse,
+  Activity,
+  FileText,
+  FileDown,
+  Clock,
+  Plus,
+  Trash2,
+} from 'lucide-react'
+
+interface GeneratedReport {
+  id: string
+  type: string
+  format: 'PDF' | 'CSV'
+  status: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED'
+  title: string
+  createdAt: string
+  fileSize: number | null
+  error: string | null
+}
+
+interface ReportSchedule {
+  id: string
+  type: string
+  format: 'PDF' | 'CSV'
+  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY'
+  recipients: string[]
+  enabled: boolean
+  nextRunAt: string | null
+  lastRunAt: string | null
+}
+
+const STATUS_TINT: Record<string, string> = {
+  COMPLETED: 'bg-fiim-emerald/10 text-fiim-emerald',
+  GENERATING: 'bg-fiim-sky/10 text-fiim-sky',
+  PENDING: 'bg-fiim-amber/10 text-fiim-amber',
+  FAILED: 'bg-red-500/10 text-red-600',
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 interface TeamSummary {
   generatedAt: string
@@ -28,9 +77,13 @@ const RISK_COLORS: Record<string, string> = {
 
 export default function ReportsPage() {
   const { user } = useAuthStore()
+  const canSchedule = user?.role === 'SUPER_ADMIN' || user?.role === 'ORGANIZATION_ADMIN'
   const [report, setReport] = useState<TeamSummary | null>(null)
+  const [history, setHistory] = useState<GeneratedReport[]>([])
+  const [schedules, setSchedules] = useState<ReportSchedule[]>([])
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
     load()
@@ -40,11 +93,41 @@ export default function ReportsPage() {
     if (!user?.orgId) return
     setLoading(true)
     try {
-      setReport(await apiService.getTeamSummaryReport(user.orgId))
+      const [summary, hist, sched] = await Promise.all([
+        apiService.getTeamSummaryReport(user.orgId),
+        apiService.getReportHistory(user.orgId).catch(() => []),
+        apiService.getReportSchedules(user.orgId).catch(() => []),
+      ])
+      setReport(summary)
+      setHistory(hist)
+      setSchedules(sched)
     } catch (e) {
       console.error('Report load error:', e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGenerate = async (format: 'pdf' | 'csv') => {
+    if (!user?.orgId) return
+    setGenerating(true)
+    try {
+      await apiService.generateTeamSummaryReport(user.orgId, format)
+      setHistory(await apiService.getReportHistory(user.orgId))
+    } catch (e) {
+      console.error('Generate report error:', e)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleDownloadReport = async (r: GeneratedReport) => {
+    if (!user?.orgId) return
+    try {
+      const blob = await apiService.downloadReport(r.id, user.orgId)
+      downloadBlob(blob, `${r.title}.${r.format.toLowerCase()}`)
+    } catch (e) {
+      console.error('Download report error:', e)
     }
   }
 
@@ -88,14 +171,24 @@ export default function ReportsPage() {
             {report ? ` • generated ${new Date(report.generatedAt).toLocaleString()}` : ''}
           </p>
         </div>
-        <button
-          onClick={handleDownload}
-          disabled={downloading}
-          className="inline-flex items-center gap-2 rounded-lg bg-fiim-sky px-4 py-2 text-sm font-medium text-white transition hover:bg-fiim-sky/90 disabled:opacity-60"
-        >
-          <Download className="h-4 w-4" />
-          {downloading ? 'Exporting…' : 'Export ACWR CSV'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="inline-flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm font-medium text-fiim-slate transition hover:bg-fiim-coolgray/50 disabled:opacity-60"
+          >
+            <Download className="h-4 w-4" />
+            {downloading ? 'Exporting…' : 'Export ACWR CSV'}
+          </button>
+          <button
+            onClick={() => handleGenerate('pdf')}
+            disabled={generating}
+            className="inline-flex items-center gap-2 rounded-lg bg-fiim-sky px-4 py-2 text-sm font-medium text-white transition hover:bg-fiim-sky/90 disabled:opacity-60"
+          >
+            <FileText className="h-4 w-4" />
+            {generating ? 'Generating…' : 'Generate PDF'}
+          </button>
+        </div>
       </div>
 
       {/* KPI Row */}
@@ -187,6 +280,186 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
+
+      {/* Generated reports history */}
+      <div className="rounded-xl bg-white shadow-sm">
+        <div className="border-b p-6">
+          <h3 className="text-lg font-semibold text-fiim-slate">Generated Reports</h3>
+        </div>
+        {history.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground">
+            No reports generated yet. Use “Generate PDF” above.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="p-4 font-medium">Title</th>
+                  <th className="p-4 font-medium">Format</th>
+                  <th className="p-4 font-medium">Status</th>
+                  <th className="p-4 font-medium">Created</th>
+                  <th className="p-4 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {history.map((r) => (
+                  <tr key={r.id}>
+                    <td className="p-4 font-medium text-fiim-slate">{r.title}</td>
+                    <td className="p-4 text-muted-foreground">{r.format}</td>
+                    <td className="p-4">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TINT[r.status] ?? 'bg-muted'}`}
+                      >
+                        {r.status}
+                      </span>
+                      {r.status === 'FAILED' && r.error ? (
+                        <span className="ml-2 text-xs text-red-600">{r.error}</span>
+                      ) : null}
+                    </td>
+                    <td className="p-4 text-muted-foreground">
+                      {new Date(r.createdAt).toLocaleString()}
+                    </td>
+                    <td className="p-4 text-right">
+                      {r.status === 'COMPLETED' ? (
+                        <button
+                          onClick={() => handleDownloadReport(r)}
+                          className="inline-flex items-center gap-1 rounded-md border border-input px-3 py-1.5 text-xs font-medium text-fiim-slate hover:bg-fiim-coolgray/50"
+                        >
+                          <FileDown className="h-3 w-3" /> Download
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Scheduled reports */}
+      {canSchedule && (
+        <ScheduledReports
+          schedules={schedules}
+          onChanged={async () => {
+            if (user?.orgId) setSchedules(await apiService.getReportSchedules(user.orgId))
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ScheduledReports({
+  schedules,
+  onChanged,
+}: {
+  schedules: ReportSchedule[]
+  onChanged: () => Promise<void>
+}) {
+  const { user } = useAuthStore()
+  const [frequency, setFrequency] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('WEEKLY')
+  const [format, setFormat] = useState<'PDF' | 'CSV'>('PDF')
+  const [busy, setBusy] = useState(false)
+
+  const create = async () => {
+    if (!user?.orgId) return
+    setBusy(true)
+    try {
+      await apiService.createReportSchedule(user.orgId, { frequency, format })
+      await onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    if (!user?.orgId) return
+    await apiService.deleteReportSchedule(id, user.orgId)
+    await onChanged()
+  }
+
+  const toggle = async (s: ReportSchedule) => {
+    if (!user?.orgId) return
+    await apiService.updateReportSchedule(s.id, user.orgId, { enabled: !s.enabled })
+    await onChanged()
+  }
+
+  return (
+    <div className="rounded-xl bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b p-6 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-lg font-semibold text-fiim-slate">Scheduled Reports</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={frequency}
+            onChange={(e) => setFrequency(e.target.value as any)}
+            className="rounded-md border border-input px-3 py-2 text-sm"
+          >
+            <option value="DAILY">Daily</option>
+            <option value="WEEKLY">Weekly</option>
+            <option value="MONTHLY">Monthly</option>
+          </select>
+          <select
+            value={format}
+            onChange={(e) => setFormat(e.target.value as any)}
+            className="rounded-md border border-input px-3 py-2 text-sm"
+          >
+            <option value="PDF">PDF</option>
+            <option value="CSV">CSV</option>
+          </select>
+          <button
+            onClick={create}
+            disabled={busy}
+            className="inline-flex items-center gap-1 rounded-lg bg-fiim-sky px-3 py-2 text-sm font-medium text-white transition hover:bg-fiim-sky/90 disabled:opacity-60"
+          >
+            <Plus className="h-4 w-4" /> Add schedule
+          </button>
+        </div>
+      </div>
+      {schedules.length === 0 ? (
+        <div className="p-8 text-center text-muted-foreground">No scheduled reports.</div>
+      ) : (
+        <div className="divide-y">
+          {schedules.map((s) => (
+            <div key={s.id} className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-fiim-sky/10 text-fiim-sky">
+                  <Clock className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-fiim-slate">
+                    {s.frequency.charAt(0) + s.frequency.slice(1).toLowerCase()} · {s.format}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.nextRunAt ? `Next: ${new Date(s.nextRunAt).toLocaleString()}` : 'Not scheduled'}
+                    {s.lastRunAt ? ` · Last: ${new Date(s.lastRunAt).toLocaleDateString()}` : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => toggle(s)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                    s.enabled ? 'bg-fiim-emerald/10 text-fiim-emerald' : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {s.enabled ? 'Enabled' : 'Paused'}
+                </button>
+                <button
+                  onClick={() => remove(s.id)}
+                  aria-label="Delete schedule"
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { useAuthStore } from '../../../stores/auth.store'
 import apiService from '../../../services/api.service'
 import { LoadingSpinner } from '../../../components/LoadingSpinner'
+import { Card } from '../../../components/ui/Card'
+import { Button } from '../../../components/ui/Button'
+import { Field, Input, Select, Textarea } from '../../../components/ui/Field'
 import { ArrowLeft, Save } from 'lucide-react'
 
 export default function AthleteFormPage() {
@@ -48,12 +52,15 @@ export default function AthleteFormPage() {
       })
     } catch (error) {
       console.error('Failed to load athlete:', error)
+      toast.error('Failed to load athlete details.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+  ) => {
     const { name, value } = e.target
     setFormData((prev: any) => ({ ...prev, [name]: value }))
   }
@@ -73,12 +80,15 @@ export default function AthleteFormPage() {
 
       if (isEditing) {
         await apiService.updateAthlete(id!, dataToSend, user.orgId)
+        toast.success('Athlete updated')
       } else {
         await apiService.createAthlete(dataToSend, user.orgId)
+        toast.success('Athlete created')
       }
       navigate('/athletes')
     } catch (error) {
       console.error('Save failed:', error)
+      toast.error('Could not save athlete. Please check the details and try again.')
     } finally {
       setSaving(false)
     }
@@ -94,15 +104,17 @@ export default function AthleteFormPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center gap-4">
-        <button
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => navigate('/athletes')}
-          className="rounded-md p-2 text-muted-foreground hover:bg-fiim-coolgray"
+          aria-label="Back to athletes"
         >
           <ArrowLeft className="h-5 w-5" />
-        </button>
+        </Button>
         <div>
-          <h2 className="text-2xl font-bold text-fiim-slate">
+          <h2 className="text-xl font-semibold text-foreground sm:text-2xl">
             {isEditing ? 'Edit Athlete' : 'Add New Athlete'}
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -113,214 +125,111 @@ export default function AthleteFormPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Personal Information */}
-        <div className="rounded-xl bg-white p-6 shadow-sm space-y-4">
-          <h3 className="text-lg font-semibold text-fiim-slate">Personal Information</h3>
-          
+        <Card className="space-y-4 p-5 sm:p-6">
+          <h3 className="text-base font-semibold text-foreground">Personal Information</h3>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">First Name *</label>
-              <input
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleChange}
-                required
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Last Name *</label>
-              <input
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleChange}
-                required
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <input
-                name="email"
-                type="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Phone</label>
-              <input
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Date of Birth</label>
-              <input
-                name="dateOfBirth"
-                type="date"
-                value={formData.dateOfBirth}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Gender</label>
-              <select
-                name="gender"
-                value={formData.gender}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+            <Field label="First Name" htmlFor="firstName" required>
+              <Input id="firstName" name="firstName" value={formData.firstName} onChange={handleChange} required />
+            </Field>
+            <Field label="Last Name" htmlFor="lastName" required>
+              <Input id="lastName" name="lastName" value={formData.lastName} onChange={handleChange} required />
+            </Field>
+            <Field label="Email" htmlFor="email">
+              <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} autoComplete="email" />
+            </Field>
+            <Field label="Phone" htmlFor="phone">
+              <Input id="phone" name="phone" type="tel" value={formData.phone} onChange={handleChange} autoComplete="tel" />
+            </Field>
+            <Field label="Date of Birth" htmlFor="dateOfBirth">
+              <Input id="dateOfBirth" name="dateOfBirth" type="date" value={formData.dateOfBirth} onChange={handleChange} />
+            </Field>
+            <Field label="Gender" htmlFor="gender">
+              <Select id="gender" name="gender" value={formData.gender} onChange={handleChange}>
                 <option value="">Select</option>
                 <option value="MALE">Male</option>
                 <option value="FEMALE">Female</option>
                 <option value="NON_BINARY">Non-binary</option>
                 <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nationality</label>
-              <input
-                name="nationality"
-                value={formData.nationality}
-                onChange={handleChange}
-                placeholder="US, UK, etc."
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+              </Select>
+            </Field>
+            <Field label="Nationality" htmlFor="nationality">
+              <Input id="nationality" name="nationality" value={formData.nationality} onChange={handleChange} placeholder="US, UK, etc." />
+            </Field>
+            <Field label="Status" htmlFor="status">
+              <Select id="status" name="status" value={formData.status} onChange={handleChange}>
                 <option value="ACTIVE">Active</option>
                 <option value="INJURED">Injured</option>
                 <option value="RETURNING_TO_PLAY">Returning to Play</option>
                 <option value="RETIRED">Retired</option>
                 <option value="TRANSFERRED">Transferred</option>
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
-        </div>
+        </Card>
 
         {/* Physical & Sport */}
-        <div className="rounded-xl bg-white p-6 shadow-sm space-y-4">
-          <h3 className="text-lg font-semibold text-fiim-slate">Physical & Sport Info</h3>
-          
+        <Card className="space-y-4 p-5 sm:p-6">
+          <h3 className="text-base font-semibold text-foreground">Physical & Sport Info</h3>
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Height (cm)</label>
-              <input
-                name="heightCm"
-                type="number"
-                value={formData.heightCm}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Weight (kg)</label>
-              <input
-                name="weightKg"
-                type="number"
-                value={formData.weightKg}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Jersey Number</label>
-              <input
-                name="jerseyNumber"
-                type="number"
-                value={formData.jerseyNumber}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
+            <Field label="Height (cm)" htmlFor="heightCm">
+              <Input id="heightCm" name="heightCm" type="number" value={formData.heightCm} onChange={handleChange} />
+            </Field>
+            <Field label="Weight (kg)" htmlFor="weightKg">
+              <Input id="weightKg" name="weightKg" type="number" value={formData.weightKg} onChange={handleChange} />
+            </Field>
+            <Field label="Jersey Number" htmlFor="jerseyNumber">
+              <Input id="jerseyNumber" name="jerseyNumber" type="number" value={formData.jerseyNumber} onChange={handleChange} />
+            </Field>
           </div>
-        </div>
+        </Card>
 
         {/* Emergency Contact */}
-        <div className="rounded-xl bg-white p-6 shadow-sm space-y-4">
-          <h3 className="text-lg font-semibold text-fiim-slate">Emergency Contact</h3>
-          
+        <Card className="space-y-4 p-5 sm:p-6">
+          <h3 className="text-base font-semibold text-foreground">Emergency Contact</h3>
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name</label>
-              <input
-                name="emergencyContactName"
-                value={formData.emergencyContactName}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Phone</label>
-              <input
-                name="emergencyContactPhone"
-                value={formData.emergencyContactPhone}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Relationship</label>
-              <input
-                name="emergencyContactRelation"
-                value={formData.emergencyContactRelation}
-                onChange={handleChange}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
+            <Field label="Name" htmlFor="emergencyContactName">
+              <Input id="emergencyContactName" name="emergencyContactName" value={formData.emergencyContactName} onChange={handleChange} />
+            </Field>
+            <Field label="Phone" htmlFor="emergencyContactPhone">
+              <Input id="emergencyContactPhone" name="emergencyContactPhone" type="tel" value={formData.emergencyContactPhone} onChange={handleChange} />
+            </Field>
+            <Field label="Relationship" htmlFor="emergencyContactRelation">
+              <Input id="emergencyContactRelation" name="emergencyContactRelation" value={formData.emergencyContactRelation} onChange={handleChange} />
+            </Field>
           </div>
-        </div>
+        </Card>
 
         {/* Notes */}
-        <div className="rounded-xl bg-white p-6 shadow-sm space-y-4">
-          <h3 className="text-lg font-semibold text-fiim-slate">Notes</h3>
-          <textarea
-            name="notes"
-            value={formData.notes}
-            onChange={handleChange}
-            rows={4}
-            className="w-full rounded-md border border-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder="Additional notes about the athlete..."
-          />
-        </div>
+        <Card className="space-y-4 p-5 sm:p-6">
+          <h3 className="text-base font-semibold text-foreground">Notes</h3>
+          <Field label="Notes" htmlFor="notes" className="[&_label]:sr-only">
+            <Textarea
+              id="notes"
+              name="notes"
+              value={formData.notes}
+              onChange={handleChange}
+              rows={4}
+              placeholder="Additional notes about the athlete..."
+            />
+          </Field>
+        </Card>
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('/athletes')}
-            className="rounded-md border border-input px-4 py-2 text-sm font-medium text-fiim-slate hover:bg-fiim-coolgray"
-          >
+          <Button type="button" variant="outline" onClick={() => navigate('/athletes')}>
             Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-md bg-fiim-sky px-4 py-2 text-sm font-medium text-white hover:bg-fiim-sky/90 disabled:opacity-50"
-          >
+          </Button>
+          <Button type="submit" disabled={saving}>
             {saving ? (
               <>
-                <LoadingSpinner size="sm" />
-                Saving...
+                <LoadingSpinner size="sm" /> Saving...
               </>
             ) : (
               <>
-                <Save className="h-4 w-4" />
-                {isEditing ? 'Update Athlete' : 'Create Athlete'}
+                <Save /> {isEditing ? 'Update Athlete' : 'Create Athlete'}
               </>
             )}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
