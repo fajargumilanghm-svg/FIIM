@@ -155,7 +155,21 @@ describe('Controllers (delegation)', () => {
 
   it('InjuriesController forwards to InjuriesService', async () => {
     const s = svc(['findAll', 'getStats', 'findOne', 'create', 'update', 'remove'])
-    const c = new InjuriesController(s)
+    const med = svc([
+      'getCaseDetail',
+      'getRtpProgress',
+      'initRtp',
+      'updateCurrentStage',
+      'advanceStage',
+      'listDiagnoses',
+      'addDiagnosis',
+      'removeDiagnosis',
+      'listTreatmentNotes',
+      'addTreatmentNote',
+      'listClearances',
+      'createClearance',
+    ])
+    const c = new InjuriesController(s, med)
     await c.findAll('org', {})
     await c.getStats('org')
     await c.findOne('id', 'org')

@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
-import { ThrottlerModule } from '@nestjs/throttler'
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'
 import { APP_GUARD } from '@nestjs/core'
 
 import configuration from './config/configuration'
@@ -18,6 +18,8 @@ import { ReportsModule } from './modules/reports/reports.module'
 import { AuditModule } from './modules/audit/audit.module'
 import { ImportModule } from './modules/import/import.module'
 import { AdminModule } from './modules/admin/admin.module'
+import { NotificationsModule } from './modules/notifications/notifications.module'
+import { ComplianceModule } from './modules/compliance/compliance.module'
 
 // Guards
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -60,8 +62,15 @@ import { RolesGuard } from './common/guards/roles.guard'
     AuditModule,
     ImportModule,
     AdminModule,
+    NotificationsModule,
+    ComplianceModule,
   ],
   providers: [
+    // Rate limiting runs first, before auth, to shed abusive traffic cheaply.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

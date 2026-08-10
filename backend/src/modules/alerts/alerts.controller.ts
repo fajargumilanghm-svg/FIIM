@@ -33,6 +33,13 @@ export class AlertsController {
     return this.alertsService.generateForOrg(orgId)
   }
 
+  @Post('escalate')
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN)
+  @ApiOperation({ summary: 'Escalate stale unacknowledged critical alerts' })
+  async escalate(@Query('orgId') orgId: string) {
+    return this.alertsService.escalateStaleCriticalAlerts(orgId)
+  }
+
   @Patch(':id/acknowledge')
   @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.COACH, Role.MEDICAL_STAFF)
   @ApiOperation({ summary: 'Acknowledge an alert' })

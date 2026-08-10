@@ -3,7 +3,11 @@ import { AlertSeverity, AlertStatus, AlertType, Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { CalculationsService } from '../calculations/calculations.service'
 import { AuditService } from '../audit/audit.service'
+import { NotificationsService } from '../notifications/notifications.service'
 import { AlertQueryDto } from './dto/alerts.dto'
+
+// Critical alerts unacknowledged beyond this window are escalated.
+const ESCALATION_HOURS = 4
 
 @Injectable()
 export class AlertsService {
@@ -11,6 +15,7 @@ export class AlertsService {
     private prisma: PrismaService,
     private calculations: CalculationsService,
     @Optional() private audit?: AuditService,
+    @Optional() private notifications?: NotificationsService,
   ) {}
 
   async findAll(orgId: string, query: AlertQueryDto = {}) {
@@ -122,10 +127,60 @@ export class AlertsService {
           entityId: alert.id,
           description: `${spec.title} for athlete ${calc.athleteId} (ACWR ${calc.acwr})`,
         })
+        // Notify coaching/medical staff on first firing only.
+        await this.notifications?.dispatchToRoles(orgId, {
+          type: 'ALERT',
+          severity: spec.severity,
+          title: spec.title,
+          body: data.message,
+          relatedType: 'alert',
+          relatedId: alert.id,
+        })
       }
     }
 
     return { date: dateOnly.toISOString().split('T')[0], scanned: calculations.length, created, updated }
+  }
+
+  /**
+   * Escalate CRITICAL alerts that have stayed OPEN (unacknowledged) longer than
+   * the escalation window. Marks them escalated and re-notifies staff. Intended
+   * to be run periodically (e.g. hourly cron).
+   */
+  async escalateStaleCriticalAlerts(orgId: string, now: Date = new Date()) {
+    const cutoff = new Date(now.getTime() - ESCALATION_HOURS * 60 * 60 * 1000)
+    const stale = await this.prisma.alert.findMany({
+      where: {
+        orgId,
+        status: AlertStatus.OPEN,
+        severity: AlertSeverity.CRITICAL,
+        escalatedAt: null,
+        createdAt: { lte: cutoff },
+      },
+      include: { athlete: { select: { firstName: true, lastName: true } } },
+    })
+
+    for (const alert of stale) {
+      await this.prisma.alert.update({ where: { id: alert.id }, data: { escalatedAt: now } })
+      const name = `${alert.athlete?.firstName ?? ''} ${alert.athlete?.lastName ?? ''}`.trim()
+      await this.notifications?.dispatchToRoles(orgId, {
+        type: 'ALERT',
+        severity: 'CRITICAL',
+        title: `ESCALATED: ${alert.title}`,
+        body: `Critical alert for ${name || 'an athlete'} has been unacknowledged for over ${ESCALATION_HOURS}h.`,
+        relatedType: 'alert',
+        relatedId: alert.id,
+      })
+      await this.audit?.log({
+        orgId,
+        action: 'ALERT_TRIGGERED',
+        entityType: 'alert',
+        entityId: alert.id,
+        description: `Escalated unacknowledged critical alert after ${ESCALATION_HOURS}h`,
+      })
+    }
+
+    return { escalated: stale.length }
   }
 
   private classifyAlert(

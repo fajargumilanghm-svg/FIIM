@@ -211,7 +211,9 @@ model User {
   auditLogs     AuditLog[]
   athletes      Athlete[]
   wellnessSurveys WellnessSurvey[]
-  
+  notifications Notification[]
+  notificationPref NotificationPreference?
+
   @@index([email])
   @@index([status])
   @@index([deletedAt])
@@ -670,6 +672,12 @@ model AlgorithmConfiguration {
   enableAcwr        Boolean @default(true) @map("enable_acwr")
   enableEWMA        Boolean @default(false) @map("enable_ewma") // Exponentially Weighted Moving Average
   ewmaConstant      Float?  @map("ewma_constant") // Tau for EWMA (default 0.5)
+
+  // Monotony / Strain (Foster, 1998)
+  enableMonotony           Boolean @default(true) @map("enable_monotony")
+  monotonyElevatedThreshold Float  @default(1.5) @map("monotony_elevated_threshold")
+  monotonyHighThreshold     Float  @default(2.0) @map("monotony_high_threshold")
+  strainThreshold           Float  @default(6000) @map("strain_threshold")
   
   // Calculated fields
   updatedAt DateTime @updatedAt
@@ -697,7 +705,14 @@ model AthleteLoadCalculation {
   // Ratios
   acwr          Float? // Acute / Chronic
   ewmaAcwr      Float? @map("ewma_acwr") // EWMA-based ACWR if enabled
-  
+
+  // Monotony & Strain (Foster, 1998)
+  weeklyLoad    Float?  @map("weekly_load")
+  monotony      Float?
+  strain        Float?
+  loadStdDev    Float?  @map("load_std_dev")
+  monotonyRisk  String? @map("monotony_risk") @db.VarChar(20) // NORMAL, ELEVATED, HIGH
+
   // Risk classification
   riskLevel     String? @db.VarChar(20) // VERY_LOW, LOW, MODERATE, HIGH, VERY_HIGH
   riskColor     String? @db.VarChar(7)  // Hex color
@@ -773,6 +788,7 @@ model Alert {
   resolvedAt     DateTime? @map("resolved_at")
   resolvedBy     String?   @map("resolved_by")
   resolutionNote String?   @map("resolution_note") @db.Text
+  escalatedAt    DateTime? @map("escalated_at") // set when a stale critical alert is escalated
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -830,6 +846,10 @@ model Injury {
   actualReturnDate   DateTime? @map("actual_return_date") @db.Date
   daysLost           Int       @default(0) @map("days_lost")
 
+  // Return-to-play & medical workflow
+  currentRtpStage RtpStage? @map("current_rtp_stage")
+  medicalHold     Boolean   @default(false) @map("medical_hold")
+
   reportedBy String? @map("reported_by")
 
   createdAt DateTime @default(now())
@@ -840,8 +860,289 @@ model Injury {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   athlete      Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
 
+  rtpProgress    InjuryRtpProgress[]
+  diagnoses      InjuryDiagnosis[]
+  treatmentNotes InjuryTreatmentNote[]
+  clearances     MedicalClearance[]
+
   @@index([orgId, status])
   @@index([athleteId, status])
   @@index([orgId, onsetDate])
   @@map("injuries")
+}
+
+// Return-to-play 5-stage model (Blanch & Gabbett; Ardern et al.)
+enum RtpStage {
+  REST               // Stage 1: rest & protection
+  RECOVERY           // Stage 2: restore ROM / basic function
+  RECONDITIONING     // Stage 3: strength & sport-specific conditioning
+  RETURN_TO_TRAINING // Stage 4: full training, no restrictions
+  RETURN_TO_PLAY     // Stage 5: cleared for competition
+}
+
+enum RtpStageStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+// Who may see a clinical record. Coaching staff only ever see GENERAL.
+enum ConfidentialityLevel {
+  GENERAL    // visible to coaching staff
+  MEDICAL    // medical staff only
+  RESTRICTED // treating clinician / admin only
+}
+
+enum ClearanceStatus {
+  PENDING
+  CLEARED
+  DENIED
+  EXPIRED
+}
+
+// Progression through the RTP stages, one row per stage entered.
+model InjuryRtpProgress {
+  id       String @id @default(uuid())
+  orgId    String @map("organization_id")
+  injuryId String @map("injury_id")
+
+  stage    RtpStage
+  status   RtpStageStatus @default(IN_PROGRESS)
+  criteria Json?          // [{ label, met }] objective checklist
+  notes    String?        @db.Text
+
+  enteredAt   DateTime  @default(now()) @map("entered_at")
+  completedAt DateTime? @map("completed_at")
+  clearedBy   String?   @map("cleared_by")
+
+  injury Injury @relation(fields: [injuryId], references: [id], onDelete: Cascade)
+
+  @@index([injuryId, stage])
+  @@index([orgId])
+  @@map("injury_rtp_progress")
+}
+
+// Clinical diagnosis (ICD-10). MEDICAL confidentiality by default.
+model InjuryDiagnosis {
+  id       String @id @default(uuid())
+  orgId    String @map("organization_id")
+  injuryId String @map("injury_id")
+
+  icd10Code       String?              @map("icd10_code") @db.VarChar(10)
+  description     String               @db.Text
+  confidentiality ConfidentialityLevel @default(MEDICAL)
+  diagnosedBy     String?              @map("diagnosed_by")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  injury Injury @relation(fields: [injuryId], references: [id], onDelete: Cascade)
+
+  @@index([injuryId])
+  @@index([orgId])
+  @@map("injury_diagnoses")
+}
+
+// Free-text treatment / progress notes. MEDICAL confidentiality by default.
+model InjuryTreatmentNote {
+  id       String @id @default(uuid())
+  orgId    String @map("organization_id")
+  injuryId String @map("injury_id")
+
+  note            String               @db.Text
+  confidentiality ConfidentialityLevel @default(MEDICAL)
+  medicalHold     Boolean              @default(false) @map("medical_hold")
+  authorId        String?              @map("author_id")
+
+  createdAt DateTime @default(now())
+
+  injury Injury @relation(fields: [injuryId], references: [id], onDelete: Cascade)
+
+  @@index([injuryId])
+  @@index([orgId])
+  @@map("injury_treatment_notes")
+}
+
+// Doctor-signed clearance gating return-to-play.
+model MedicalClearance {
+  id       String @id @default(uuid())
+  orgId    String @map("organization_id")
+  injuryId String @map("injury_id")
+
+  status        ClearanceStatus @default(PENDING)
+  restrictions  Json?           // { activities: [...], notes }
+  clearedBy     String?         @map("cleared_by") // clinician userId
+  clearedAt     DateTime?       @map("cleared_at")
+  expiresAt     DateTime?       @map("expires_at")
+  followUpDate  DateTime?       @map("follow_up_date")
+  signatureHash String?         @map("signature_hash")
+  notes         String?         @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  injury Injury @relation(fields: [injuryId], references: [id], onDelete: Cascade)
+
+  @@index([injuryId])
+  @@index([orgId, status])
+  @@map("medical_clearances")
+}
+
+// ==========================================================================
+// Notifications & delivery preferences (Sprint 08)
+// ==========================================================================
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+// Per-user in-app notification. Email/SMS/push are fan-out channels recorded
+// in `channels` at dispatch time; the row itself is the in-app record.
+model Notification {
+  id     String @id @default(uuid())
+  orgId  String @map("organization_id")
+  userId String @map("user_id")
+
+  type        String  @db.VarChar(50) // ALERT, MESSAGE, SYSTEM
+  severity    String? @db.VarChar(20)
+  title       String  @db.VarChar(200)
+  body        String  @db.Text
+  relatedType String? @map("related_type") @db.VarChar(50)
+  relatedId   String? @map("related_id")
+  channels    String[] // channels actually dispatched for this notification
+
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([orgId])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id     String @id @default(uuid())
+  orgId  String @map("organization_id")
+  userId String @unique @map("user_id")
+
+  inApp Boolean @default(true) @map("in_app")
+  email Boolean @default(true)
+  sms   Boolean @default(false)
+  push  Boolean @default(false)
+
+  // Quiet hours as local hours 0-23; non-critical channels suppressed within.
+  quietHoursStart Int? @map("quiet_hours_start")
+  quietHoursEnd   Int? @map("quiet_hours_end")
+  digest          Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ==========================================================================
+// Reporting: generated & scheduled reports (Sprint 08)
+// ==========================================================================
+
+enum ReportType {
+  TEAM_SUMMARY
+  ATHLETE_LOAD
+  INJURY
+}
+
+enum ReportStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+enum ReportFormat {
+  PDF
+  CSV
+}
+
+enum ScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model GeneratedReport {
+  id    String @id @default(uuid())
+  orgId String @map("organization_id")
+
+  type   ReportType
+  format ReportFormat @default(PDF)
+  status ReportStatus @default(PENDING)
+  title  String       @db.VarChar(200)
+
+  params      Json?
+  filePath    String? @map("file_path") @db.VarChar(500)
+  fileSize    Int?    @map("file_size")
+  error       String? @db.Text
+  requestedBy String? @map("requested_by")
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime? @map("completed_at")
+
+  @@index([orgId, createdAt])
+  @@index([orgId, status])
+  @@map("generated_reports")
+}
+
+model ScheduledReport {
+  id    String @id @default(uuid())
+  orgId String @map("organization_id")
+
+  type       ReportType
+  format     ReportFormat      @default(PDF)
+  frequency  ScheduleFrequency
+  recipients String[] // email addresses
+  enabled    Boolean           @default(true)
+
+  lastRunAt DateTime? @map("last_run_at")
+  nextRunAt DateTime? @map("next_run_at")
+  createdBy String?   @map("created_by")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, enabled])
+  @@map("scheduled_reports")
+}
+
+// ==========================================================================
+// GDPR compliance: right-to-erasure requests (Sprint 10)
+// ==========================================================================
+
+enum ErasureStatus {
+  PENDING   // soft-deleted, awaiting hard-delete after grace period
+  COMPLETED // hard-deleted
+  CANCELLED
+}
+
+model ErasureRequest {
+  id        String @id @default(uuid())
+  orgId     String @map("organization_id")
+  athleteId String @map("athlete_id")
+
+  status      ErasureStatus @default(PENDING)
+  reason      String?       @db.Text
+  requestedBy String?       @map("requested_by")
+  scheduledFor DateTime     @map("scheduled_for") // hard-delete date
+  completedAt  DateTime?    @map("completed_at")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, status])
+  @@index([status, scheduledFor])
+  @@map("erasure_requests")
 }

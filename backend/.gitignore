@@ -62,3 +62,4 @@ Dockerfile.prod
 .parcel-cache
 .next
 out
+storage/

@@ -28,6 +28,10 @@ export class CalculationsService {
           highThreshold: 1.5,
           enableAcwr: true,
           enableEWMA: false,
+          enableMonotony: true,
+          monotonyElevatedThreshold: 1.5,
+          monotonyHighThreshold: 2.0,
+          strainThreshold: 6000,
         },
       })
     }
@@ -57,6 +61,10 @@ export class CalculationsService {
         enableAcwr: data.enableAcwr ?? true,
         enableEWMA: data.enableEWMA ?? false,
         ewmaConstant: data.ewmaConstant ?? 0.5,
+        enableMonotony: data.enableMonotony ?? true,
+        monotonyElevatedThreshold: data.monotonyElevatedThreshold ?? 1.5,
+        monotonyHighThreshold: data.monotonyHighThreshold ?? 2.0,
+        strainThreshold: data.strainThreshold ?? 6000,
       },
       update: {
         ...data,
@@ -110,10 +118,20 @@ export class CalculationsService {
       highThreshold: config.highThreshold,
       enableEWMA: config.enableEWMA,
       ewmaConstant: config.ewmaConstant || 0.5,
+      enableMonotony: config.enableMonotony,
+      monotonyElevatedThreshold: config.monotonyElevatedThreshold,
+      monotonyHighThreshold: config.monotonyHighThreshold,
+      strainThreshold: config.strainThreshold,
     }
 
     const engine = new CalculationEngine(engineConfig)
     const result = engine.calculateAcwr(dailyLoads, calcDate)
+
+    // Monotony & Strain are computed independently of ACWR so a partial data
+    // window can still surface weekly-load variability.
+    const monotonyResult = config.enableMonotony
+      ? engine.calculateMonotonyStrain(dailyLoads, calcDate)
+      : null
 
     if (!result) {
       return {
@@ -139,6 +157,11 @@ export class CalculationsService {
         chronicLoad: result.chronicLoad,
         acwr: result.acwr,
         ewmaAcwr: result.ewmaAcwr,
+        weeklyLoad: monotonyResult?.weeklyLoad ?? null,
+        monotony: monotonyResult?.monotony ?? null,
+        strain: monotonyResult?.strain ?? null,
+        loadStdDev: monotonyResult?.loadStdDev ?? null,
+        monotonyRisk: monotonyResult?.monotonyRisk ?? null,
         riskLevel: result.riskLevel,
         riskColor: result.riskColor,
         totalSessions: sessions.length,
@@ -154,6 +177,11 @@ export class CalculationsService {
         chronicLoad: result.chronicLoad,
         acwr: result.acwr,
         ewmaAcwr: result.ewmaAcwr,
+        weeklyLoad: monotonyResult?.weeklyLoad ?? null,
+        monotony: monotonyResult?.monotony ?? null,
+        strain: monotonyResult?.strain ?? null,
+        loadStdDev: monotonyResult?.loadStdDev ?? null,
+        monotonyRisk: monotonyResult?.monotonyRisk ?? null,
         riskLevel: result.riskLevel,
         riskColor: result.riskColor,
         totalSessions: sessions.length,
@@ -256,6 +284,10 @@ export class CalculationsService {
         chronicLoad: c.chronicLoad,
         acwr: c.acwr,
         ewmaAcwr: c.ewmaAcwr,
+        weeklyLoad: c.weeklyLoad,
+        monotony: c.monotony,
+        strain: c.strain,
+        monotonyRisk: c.monotonyRisk,
         riskLevel: c.riskLevel,
         riskColor: c.riskColor,
         dataPoints: c.dataPoints,

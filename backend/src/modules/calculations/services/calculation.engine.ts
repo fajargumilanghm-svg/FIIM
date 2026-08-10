@@ -13,6 +13,17 @@ export interface AcwrResult {
   dataPoints: number
 }
 
+export interface MonotonyStrainResult {
+  weeklyLoad: number // Sum of daily loads over the acute window
+  meanDailyLoad: number // Mean daily load over the window (rest days counted as 0)
+  loadStdDev: number // Population standard deviation of daily load over the window
+  monotony: number // meanDailyLoad / loadStdDev (Foster, 1998)
+  strain: number // weeklyLoad × monotony
+  monotonyRisk: string // NORMAL, ELEVATED, HIGH
+  monotonyRiskColor: string
+  daysCounted: number // Number of calendar days in window (rest days included)
+}
+
 export interface CalculationConfig {
   acuteWindowDays: number
   chronicWindowDays: number
@@ -23,6 +34,10 @@ export interface CalculationConfig {
   enableAcwr?: boolean
   enableEWMA: boolean
   ewmaConstant?: number
+  enableMonotony?: boolean
+  monotonyElevatedThreshold?: number
+  monotonyHighThreshold?: number
+  strainThreshold?: number
 }
 
 export const DEFAULT_CONFIG: CalculationConfig = {
@@ -35,6 +50,10 @@ export const DEFAULT_CONFIG: CalculationConfig = {
   enableAcwr: true,
   enableEWMA: false,
   ewmaConstant: 0.5,
+  enableMonotony: true,
+  monotonyElevatedThreshold: 1.5,
+  monotonyHighThreshold: 2.0,
+  strainThreshold: 6000,
 }
 
 export class CalculationEngine {
@@ -236,6 +255,92 @@ export class CalculationEngine {
       riskColor,
       dataPoints,
     }
+  }
+
+  /**
+   * Calculate Training Monotony and Strain (Foster, 1998).
+   *
+   * Over the acute window (default 7 days) — treating days with no training as
+   * zero-load — compute:
+   *   - weeklyLoad    = Σ daily load
+   *   - meanDailyLoad = weeklyLoad / N days
+   *   - loadStdDev    = population SD of daily load
+   *   - monotony      = meanDailyLoad / loadStdDev
+   *   - strain        = weeklyLoad × monotony
+   *
+   * High monotony (>2.0) combined with high load produces high strain, which is
+   * associated with illness and non-functional overreaching.
+   *
+   * @param dailyLoads Array of {date, load} (only training days need be present)
+   * @param targetDate End of the window (inclusive)
+   * @returns MonotonyStrainResult, or null when there is no load in the window
+   */
+  calculateMonotonyStrain(
+    dailyLoads: LoadCalculationInput[],
+    targetDate: Date,
+  ): MonotonyStrainResult | null {
+    const windowDays = this.config.acuteWindowDays
+    const windowStart = new Date(targetDate)
+    windowStart.setDate(windowStart.getDate() - windowDays)
+
+    // Build one bucket per calendar day in the window; rest days stay at 0.
+    const buckets = new Array(windowDays).fill(0)
+    for (const d of dailyLoads) {
+      if (d.date > windowStart && d.date <= targetDate) {
+        const dayOffset = Math.floor(
+          (targetDate.getTime() - d.date.getTime()) / (1000 * 60 * 60 * 24),
+        )
+        const idx = windowDays - 1 - dayOffset
+        if (idx >= 0 && idx < windowDays) {
+          buckets[idx] += d.load
+        }
+      }
+    }
+
+    const weeklyLoad = buckets.reduce((sum, v) => sum + v, 0)
+    if (weeklyLoad <= 0) {
+      return null
+    }
+
+    const meanDailyLoad = weeklyLoad / windowDays
+    const variance =
+      buckets.reduce((sum, v) => sum + Math.pow(v - meanDailyLoad, 2), 0) / windowDays
+    const loadStdDev = Math.sqrt(variance)
+
+    // If every day carries an identical load, SD is 0 → monotony is undefined
+    // mathematically. Guard with a small epsilon so it reads as "very high".
+    const monotony = meanDailyLoad / Math.max(loadStdDev, 0.01)
+    const strain = weeklyLoad * monotony
+
+    return {
+      weeklyLoad: parseFloat(weeklyLoad.toFixed(2)),
+      meanDailyLoad: parseFloat(meanDailyLoad.toFixed(2)),
+      loadStdDev: parseFloat(loadStdDev.toFixed(2)),
+      monotony: parseFloat(monotony.toFixed(2)),
+      strain: parseFloat(strain.toFixed(2)),
+      daysCounted: windowDays,
+      ...this.classifyMonotony(monotony, strain),
+    }
+  }
+
+  /**
+   * Classify monotony/strain into a risk band using configured thresholds.
+   */
+  private classifyMonotony(
+    monotony: number,
+    strain: number,
+  ): { monotonyRisk: string; monotonyRiskColor: string } {
+    const elevated = this.config.monotonyElevatedThreshold ?? 1.5
+    const high = this.config.monotonyHighThreshold ?? 2.0
+    const strainCap = this.config.strainThreshold ?? 6000
+
+    if (monotony >= high || strain >= strainCap) {
+      return { monotonyRisk: 'HIGH', monotonyRiskColor: '#dc2626' }
+    }
+    if (monotony >= elevated) {
+      return { monotonyRisk: 'ELEVATED', monotonyRiskColor: '#d97706' }
+    }
+    return { monotonyRisk: 'NORMAL', monotonyRiskColor: '#059669' }
   }
 
   /**
