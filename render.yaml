@@ -1,12 +1,7 @@
-# Render Blueprint — FIIM backend API + managed Postgres.
+# Render Blueprint — FIIM backend API (database is external: Supabase).
 # Deploy: push this repo, then in Render → "New +" → "Blueprint" and pick it.
+# After it provisions, set DATABASE_URL and FRONTEND_URL in the fiim-api env.
 # Docs: https://render.com/docs/blueprint-spec
-databases:
-  - name: fiim-db
-    databaseName: fiim
-    user: fiim
-    plan: free # NOTE: free Postgres is deleted after 90 days — upgrade for prod.
-
 services:
   - type: web
     name: fiim-api
@@ -17,10 +12,9 @@ services:
     healthCheckPath: /api/docs
     autoDeploy: true
     envVars:
+      # Supabase Session-pooler connection string (set in the Render dashboard).
       - key: DATABASE_URL
-        fromDatabase:
-          name: fiim-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: NODE_ENV
